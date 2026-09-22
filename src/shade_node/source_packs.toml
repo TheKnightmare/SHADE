@@ -1,0 +1,226 @@
+# Explicitly enabled by [source_packs] enabled in config.local.toml.
+[[sources]]
+id = "cisa-kev"
+kind = "cisa_kev"
+name = "CISA Known Exploited Vulnerabilities"
+url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+source_type = "official"
+source_family = "cisa"
+category = "cyber"
+area = "NATIONAL"
+pack = "cyber"
+min_poll_seconds = 3600
+
+[[sources]]
+id = "cisa-advisories"
+kind = "rss"
+name = "CISA Cybersecurity Advisories"
+url = "https://www.cisa.gov/cybersecurity-advisories/all.xml"
+source_type = "official"
+source_family = "cisa"
+category = "cyber"
+area = "NATIONAL"
+pack = "cyber"
+min_poll_seconds = 3600
+
+[[sources]]
+id = "cloudflare-status"
+kind = "status_api"
+name = "Cloudflare Incident Status"
+url = "https://www.cloudflarestatus.com/api/v2/summary.json"
+source_type = "official"
+source_family = "cloudflare"
+category = "communications"
+pack = "communications"
+min_poll_seconds = 900
+
+[[sources]]
+id = "eia-energy"
+kind = "rss"
+name = "EIA Today in Energy"
+url = "https://www.eia.gov/rss/todayinenergy.xml"
+source_type = "official"
+source_family = "eia"
+category = "fuel"
+area = "NATIONAL"
+pack = "energy"
+min_poll_seconds = 3600
+
+[[sources]]
+id = "fema-regional"
+kind = "fema_declarations"
+name = "OpenFEMA Regional Disaster Declarations"
+url = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=state%20eq%20%27TN%27%20or%20state%20eq%20%27NC%27%20or%20state%20eq%20%27KY%27%20or%20state%20eq%20%27GA%27&$orderby=declarationDate%20desc&$top=100"
+source_type = "official"
+source_family = "fema"
+category = "public-safety"
+pack = "regional"
+min_poll_seconds = 3600
+
+# Endpoint responds but returned zero items and a 2025 build date; disabled.
+[[sources]]
+id = "cdc-han"
+kind = "rss"
+name = "CDC Health Alert Network"
+url = "https://tools.cdc.gov/api/v2/resources/media/413690.rss"
+source_type = "official"
+source_family = "cdc"
+category = "public-health"
+area = "NATIONAL"
+pack = "health"
+enabled = false
+min_poll_seconds = 3600
+
+[[sources]]
+id = "faa-status"
+kind = "faa_status"
+name = "FAA National Airspace System Status"
+url = "https://nasstatus.faa.gov/api/airport-status-information"
+source_type = "official"
+source_family = "faa"
+category = "transportation"
+pack = "transportation"
+min_poll_seconds = 900
+
+[[sources]]
+id = "usgs-southeast"
+kind = "usgs_geojson"
+name = "USGS Southeast Earthquakes M3.5+"
+url = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=30&maxlatitude=39&minlongitude=-90&maxlongitude=-75&minmagnitude=3.5&orderby=time&limit=100"
+source_type = "official"
+source_family = "usgs"
+category = "earthquake"
+pack = "regional"
+min_poll_seconds = 3600
+
+[[sources]]
+id = "tdot-east-events"
+kind = "tdot_events"
+name = "TDOT SmartWay East Tennessee Major Events"
+url = "https://spatial.tdot.tn.gov/arcgis/rest/services/Smartway/Smartway_Events/FeatureServer/0/query?where=REGION%3D1%20AND%20%28END_DATE%20IS%20NULL%20OR%20END_DATE%20%3E%20CURRENT_TIMESTAMP%29&outFields=*&returnGeometry=true&orderByFields=REVISED_DATE%20DESC&resultRecordCount=500&f=json"
+source_type = "official"
+source_family = "tdot-smartway"
+category = "transportation"
+area = "ETN/WNC"
+pack = "local-official"
+min_poll_seconds = 300
+
+[[sources]]
+id = "kpd-news"
+kind = "rss"
+name = "Knoxville Police News and Alerts"
+url = "https://www.knoxvilletnpolice.gov/feed/"
+source_type = "official"
+source_family = "knoxville-police"
+category = "public-safety"
+area = "Knoxville"
+pack = "local-official"
+min_poll_seconds = 900
+
+[[sources]]
+id = "kcso-news"
+kind = "rss"
+name = "Knox County Sheriff's Office Newsroom"
+url = "https://knoxsheriff.org/feed/"
+source_type = "official"
+source_family = "knox-county-sheriff"
+category = "public-safety"
+area = "Knoxville"
+pack = "local-official"
+min_poll_seconds = 900
+
+[[sources]]
+id = "oak-ridge-alerts"
+kind = "rss"
+name = "City of Oak Ridge Alerts"
+url = "https://oakridgetn.gov/RSSFeed.aspx?ModID=63&CID=Alerts-4"
+source_type = "official"
+source_family = "oak-ridge"
+category = "public-safety"
+area = "Anderson, TN"
+pack = "local-official"
+min_poll_seconds = 900
+
+[[sources]]
+id = "knox-tn-today"
+kind = "rss"
+name = "Knox TN Today"
+url = "https://www.knoxtntoday.com/feed/"
+source_type = "media"
+source_family = "knox-tn-today"
+category = "chatter"
+area = "Knoxville"
+pack = "local-community"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "knox-focus"
+kind = "rss"
+name = "The Knoxville Focus"
+url = "https://knoxfocus.com/feed/"
+source_type = "media"
+source_family = "knoxville-focus"
+category = "chatter"
+area = "Knoxville"
+pack = "local-community"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "knoxviews"
+kind = "rss"
+name = "KnoxViews Community News"
+url = "https://knoxviews.com/rss.xml"
+source_type = "community"
+source_family = "knoxviews"
+category = "chatter"
+area = "Knoxville"
+pack = "local-community"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "east-tn-enlightener"
+kind = "rss"
+name = "East Tennessee Enlightener"
+url = "https://etenlightener.org/feed/"
+source_type = "media"
+source_family = "east-tennessee-enlightener"
+category = "chatter"
+area = "Knoxville"
+pack = "local-community"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "npr-national"
+kind = "rss"
+name = "NPR National News"
+url = "https://feeds.npr.org/1001/rss.xml"
+source_type = "media"
+source_family = "npr"
+category = "top-news"
+area = "NATIONAL"
+pack = "top-news"
+min_poll_seconds = 900
+
+[[sources]]
+id = "pbs-newshour"
+kind = "rss"
+name = "PBS NewsHour Headlines"
+url = "https://www.pbs.org/newshour/feeds/rss/headlines"
+source_type = "media"
+source_family = "pbs-newshour"
+category = "top-news"
+area = "NATIONAL"
+pack = "top-news"
+min_poll_seconds = 900
+
+[[sources]]
+id = "bbc-top"
+kind = "rss"
+name = "BBC News World"
+url = "https://feeds.bbci.co.uk/news/world/rss.xml"
+source_type = "media"
+source_family = "bbc-news"
+category = "top-news"
+area = "NATIONAL"
+pack = "top-news"
+min_poll_seconds = 900

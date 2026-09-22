@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shade-node"
+version = "0.4.0"
+description = "Source harvesting, attribution, deduplication, and export for human-reviewed radio traffic"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "TheKnightmare"}]
+dependencies = []
+
+[project.scripts]
+shade = "shade_node.cli:main"
+
+[project.gui-scripts]
+shade-gui = "shade_node.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+shade_node = ["config.example.toml", "source_packs.toml", "assets/*.ico"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.urls]
+Repository = "https://github.com/TheKnightmare/SHADE"

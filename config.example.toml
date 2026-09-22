@@ -1,0 +1,135 @@
+[operator]
+callsign = "SET-ME"
+network = "GHOSTNET"
+region_label = "ETN/WNC"
+max_message_chars = 500
+
+[operation]
+# standard | exercise | actual
+mode = "standard"
+minimum_queue_score = 35
+
+[emcomm]
+# These settings apply only in exercise or actual mode.
+network = "GHOSTNET"
+region_label = "ETN/WNC"
+minimum_queue_score = 10
+max_message_chars = 700
+
+[collection]
+database = "data/shade.db"
+max_age_days = 7
+request_timeout_seconds = 20
+max_response_bytes = 5000000
+user_agent = "SHADE/0.3 (set-a-real-contact@example.invalid)"
+
+[[sources]]
+id = "nws-tn"
+kind = "nws_alerts"
+name = "National Weather Service Tennessee"
+url = "https://api.weather.gov/alerts/active?area=TN"
+source_type = "official"
+source_family = "nws"
+enabled = true
+
+[[sources]]
+id = "nws-nc"
+kind = "nws_alerts"
+name = "National Weather Service North Carolina"
+url = "https://api.weather.gov/alerts/active?area=NC"
+source_type = "official"
+source_family = "nws"
+enabled = true
+
+[[sources]]
+id = "nws-ky"
+kind = "nws_alerts"
+name = "National Weather Service Kentucky"
+url = "https://api.weather.gov/alerts/active?area=KY"
+source_type = "official"
+source_family = "nws"
+enabled = true
+
+[[sources]]
+id = "nws-ga"
+kind = "nws_alerts"
+name = "National Weather Service Georgia"
+url = "https://api.weather.gov/alerts/active?area=GA"
+source_type = "official"
+source_family = "nws"
+enabled = true
+
+[[sources]]
+id = "usgs-significant"
+kind = "usgs_geojson"
+name = "USGS Significant Earthquakes"
+url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson"
+source_type = "official"
+source_family = "usgs"
+enabled = true
+
+[[sources]]
+id = "swpc-alerts"
+kind = "swpc_alerts"
+name = "NOAA Space Weather Prediction Center"
+url = "https://services.swpc.noaa.gov/products/alerts.json"
+source_type = "official"
+source_family = "noaa-swpc"
+enabled = true
+
+[[sources]]
+id = "gdacs"
+kind = "rss"
+name = "Global Disaster Alert and Coordination System"
+url = "https://www.gdacs.org/xml/rss.xml"
+source_type = "official"
+source_family = "gdacs"
+category = "disaster"
+enabled = true
+
+# Community/forum feeds belong in config.local.toml. Give different sites
+# different source_family values; mirrors and reposts must share one family.
+#
+# [[sources]]
+# id = "community-example"
+# kind = "rss"
+# name = "Example monitoring forum"
+# url = "https://example.org/feed.xml"
+# source_type = "community"
+# source_family = "example-origin"
+# category = "chatter"
+# enabled = false
+
+# Emergency-only feeds remain dormant in standard mode and are included when
+# SHADE runs in exercise or actual mode. Add only feeds you are authorized to
+# poll; this example is intentionally not live.
+#
+# [[sources]]
+# id = "local-eoc"
+# kind = "rss"
+# name = "Local Emergency Operations Feed"
+# url = "https://example.gov/emergency-feed.xml"
+# source_type = "official"
+# source_family = "local-eoc"
+# category = "emergency"
+# enabled = true
+# emcomm_only = true
+
+# Optional native public sources; details and limitations in docs/SOURCES.md.
+[source_packs]
+enabled = ["cyber", "communications", "energy", "regional", "transportation"]
+
+[relevance]
+minimum_score = 45
+max_age_hours = 168
+regional_states = ["TN", "KY", "GA", "NC"]
+local_terms = ["east tennessee", "eastern tennessee", "western north carolina", "knoxville", "asheville", "tri-cities"]
+# local_counties may replace the built-in ETN/WNC county list; use "County, ST".
+global_quake_magnitude = 7.5
+regional_quake_magnitude = 3.5
+domestic_quake_magnitude = 6.5
+
+[relevance.category_priorities]
+infrastructure = 0
+cyber = 0
+communications = 0

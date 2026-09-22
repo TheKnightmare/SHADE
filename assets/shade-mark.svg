@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">SHADE application mark</title>
+  <desc id="desc">A headset operator extracts one clean signal from a canopy of radio noise and routes it to a forward whip antenna.</desc>
+  <rect width="1024" height="1024" rx="180" fill="#090A0B"/>
+
+  <!-- A canopy of signal noise. -->
+  <g fill="#92999C">
+    <rect x="80" y="224" width="26" height="118" rx="13"/>
+    <rect x="122" y="178" width="26" height="204" rx="13"/>
+    <rect x="164" y="246" width="26" height="166" rx="13"/>
+    <rect x="206" y="134" width="28" height="318" rx="14"/>
+    <rect x="252" y="200" width="26" height="286" rx="13"/>
+    <rect x="294" y="106" width="30" height="414" rx="15"/>
+    <rect x="342" y="168" width="26" height="382" rx="13"/>
+    <rect x="384" y="84" width="30" height="492" rx="15"/>
+    <rect x="432" y="150" width="26" height="448" rx="13"/>
+    <rect x="474" y="214" width="26" height="402" rx="13"/>
+    <rect x="566" y="214" width="26" height="402" rx="13"/>
+    <rect x="608" y="150" width="26" height="448" rx="13"/>
+    <rect x="650" y="84" width="30" height="492" rx="15"/>
+    <rect x="698" y="168" width="26" height="382" rx="13"/>
+    <rect x="740" y="106" width="30" height="414" rx="15"/>
+    <rect x="788" y="200" width="26" height="286" rx="13"/>
+    <rect x="832" y="134" width="28" height="318" rx="14"/>
+    <rect x="876" y="246" width="26" height="166" rx="13"/>
+    <rect x="918" y="178" width="26" height="204" rx="13"/>
+  </g>
+
+  <!-- Exactly one clean signal is pulled from the noise. -->
+  <path d="M520 112v360q0 34 34 54v220q0 34-34 34h-54" fill="none" stroke="#4CC7DF" stroke-width="28" stroke-linecap="round"/>
+
+  <!-- Back-end operator and console. -->
+  <g fill="#ECE9E3">
+    <circle cx="350" cy="614" r="62"/>
+    <path d="M248 742q14-102 102-102t102 102Z"/>
+    <rect x="246" y="546" width="34" height="102" rx="17"/>
+    <rect x="420" y="546" width="34" height="102" rx="17"/>
+  </g>
+  <path d="M262 570q9-118 88-118t88 118" fill="none" stroke="#ECE9E3" stroke-width="26" stroke-linecap="round"/>
+  <path d="M437 624q0 54-60 54" fill="none" stroke="#ECE9E3" stroke-width="22" stroke-linecap="round"/>
+  <rect x="210" y="748" width="372" height="148" rx="28" fill="#24282A"/>
+  <g fill="#92999C">
+    <rect x="246" y="784" width="114" height="18" rx="9"/>
+    <rect x="246" y="820" width="114" height="18" rx="9"/>
+    <rect x="246" y="856" width="114" height="18" rx="9"/>
+    <rect x="466" y="824" width="78" height="18" rx="9"/>
+  </g>
+  <circle cx="432" cy="818" r="42" fill="#090A0B" stroke="#4CC7DF" stroke-width="22"/>
+
+  <!-- Clean output routed to a simple forward antenna. -->
+  <path d="M474 818h314" fill="none" stroke="#4CC7DF" stroke-width="28" stroke-linecap="round"/>
+  <g fill="none" stroke="#4CC7DF" stroke-width="26" stroke-linecap="round">
+    <path d="M842 646q-56-56 0-112"/>
+    <path d="M922 646q56-56 0-112"/>
+  </g>
+  <g fill="#ECE9E3">
+    <circle cx="882" cy="590" r="24"/>
+    <rect x="868" y="608" width="28" height="194" rx="14"/>
+    <rect x="842" y="784" width="80" height="78" rx="18"/>
+    <rect x="824" y="854" width="116" height="34" rx="17"/>
+  </g>
+</svg>
