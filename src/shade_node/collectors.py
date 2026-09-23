@@ -7,6 +7,9 @@ import re
 import urllib.error
 import urllib.request
 import os
+import csv
+import io
+from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
 from html import unescape
 import xml.etree.ElementTree as ET
 
@@ -21,7 +24,7 @@ class CollectionError(RuntimeError):
         self.retry_after=retry_after
 
 
-def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int, headers: dict | None = None) -> bytes:
+def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int, headers: dict | None = None, return_headers: bool = False):
     if not url.lower().startswith("https://"):
         raise CollectionError(f"refusing non-HTTPS source: {url}")
     request = urllib.request.Request(
@@ -32,8 +35,10 @@ def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int, head
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not newurl.lower().startswith('https://'): raise CollectionError('Refusing non-HTTPS redirect')
             return super().redirect_request(req, fp, code, msg, headers, newurl)
+    response_headers = {}
     try:
         with urllib.request.build_opener(HTTPSRedirect).open(request, timeout=timeout) as response:
+            response_headers = dict(response.headers.items())
             length = response.headers.get("Content-Length")
             if length and int(length) > max_bytes:
                 raise CollectionError(f"response exceeds {max_bytes} bytes")
@@ -49,7 +54,7 @@ def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int, head
         raise CollectionError(str(exc)) from exc
     if len(data) > max_bytes:
         raise CollectionError(f"response exceeds {max_bytes} bytes")
-    return data
+    return (data, response_headers) if return_headers else data
 
 
 def _json(data: bytes):
@@ -298,6 +303,120 @@ def parse_tdot(source, data):
     return result
 
 
+def parse_usgs_waterservices(source, data):
+    payload = _json(data)
+    series = payload.get('value', {}).get('timeSeries', []) if isinstance(payload, dict) else []
+    if not isinstance(series, list):
+        raise CollectionError('Invalid USGS Water Services schema')
+    result = []
+    for stream in series:
+        site = (stream.get('sourceInfo', {}).get('siteCode') or [{}])[0].get('value', '')
+        site_name = stream.get('sourceInfo', {}).get('siteName', '')
+        variable = stream.get('variable', {})
+        parameter = (variable.get('variableCode') or [{}])[0].get('value', '')
+        unit = (variable.get('unit') or {}).get('unitCode', '')
+        for point in (stream.get('values') or [{}])[0].get('value', []):
+            raw_value = point.get('value')
+            try: numeric = float(raw_value)
+            except (TypeError, ValueError): continue
+            when = point.get('dateTime', '')
+            exceeded = source.threshold is not None and numeric >= source.threshold
+            external = f'{site}|{parameter}|{when}'
+            result.append(Observation(source.id, source.name, 'official', 'usgs-waterservices', external,
+                f'{site_name or site} {parameter} reading: {numeric:g} {unit}',
+                f'USGS site {site}; parameter {parameter}; value {numeric:g} {unit}.', source.url,
+                category='regional', location=source.area or 'ETN/WNC',
+                severity='severe' if exceeded else 'moderate', published_at=when,
+                raw={'site': site, 'site_name': site_name, 'parameter': parameter,
+                     'value': numeric, 'unit': unit, 'dateTime': when,
+                     '_threshold_exceeded': exceeded, '_area': source.area or 'ETN/WNC'}))
+    return result
+
+
+def parse_radnet(source, data):
+    text = data.decode('utf-8-sig', 'replace')
+    rows = list(csv.DictReader(io.StringIO(text)))
+    if not rows:
+        raise CollectionError('RadNet CSV contained no rows')
+    result = []
+    for row in rows[-50:]:
+        normalized = {str(k).strip().lower(): (v or '').strip() for k, v in row.items() if k}
+        when = normalized.get('date/time') or normalized.get('datetime') or normalized.get('date') or ''
+        value = next((normalized.get(key) for key in ('exposure rate', 'gamma gross count rate', 'value')
+                      if normalized.get(key) not in (None, '')), '')
+        try: numeric = float(value)
+        except (TypeError, ValueError): continue
+        station = normalized.get('location') or normalized.get('station') or source.name
+        external = f'{station}|{when}|{value}'
+        result.append(Observation(source.id, source.name, 'official', 'epa-radnet', external,
+            f'RadNet {station}: {numeric:g}', f'RadNet reading {numeric:g} {normalized.get("unit", "")} at {station}.', source.url,
+            category='radiological', location=source.area or station, severity='moderate', published_at=when,
+            raw={**row, '_area': source.area or 'ETN/WNC'}))
+    return result
+
+
+def parse_safecast(source, data):
+    payload = _json(data)
+    rows = payload.get('measurements', payload) if isinstance(payload, dict) else payload
+    if not isinstance(rows, list): raise CollectionError('Invalid Safecast API schema')
+    result = []
+    for item in rows:
+        value = next((item.get(key) for key in ('value', 'value_numeric', 'dose_rate')
+                      if item.get(key) is not None), None)
+        try: numeric = float(value)
+        except (TypeError, ValueError): continue
+        lat, lon = item.get('latitude'), item.get('longitude')
+        location = f'{lat},{lon}' if lat is not None and lon is not None else source.area
+        external = str(item.get('id') or f'{location}|{item.get("captured_at", "")}|{numeric}')
+        result.append(Observation(source.id, source.name, 'community', 'safecast', external,
+            f'Safecast reading {numeric:g} {item.get("unit", "")}',
+            f'Volunteer sensor reading {numeric:g} {item.get("unit", "")}; sensor {item.get("device_id", "unknown")}.', source.url,
+            category='radiological', location=location, severity='moderate', published_at=item.get('captured_at', ''),
+            raw={**item, '_area': source.area or 'ETN/WNC'}))
+    return result
+
+
+def _strip_html(value):
+    return re.sub(r'<[^>]+>', ' ', unescape(value or '')).replace('&nbsp;', ' ').strip()
+
+
+def parse_mastodon(source, data):
+    payload = _json(data)
+    if not isinstance(payload, list): raise CollectionError('Invalid Mastodon timeline schema')
+    result = []
+    for item in payload:
+        account = item.get('account') or {}
+        handle = account.get('acct') or account.get('username', '')
+        published = item.get('created_at', '')
+        url = item.get('url') or ''
+        external = str(item.get('id') or url)
+        family = source.source_family or f'mastodon-{source.instance or "instance"}-{(source.hashtag or "tag").lstrip("#")}'
+        result.append(Observation(source.id, source.name, 'community', family, external,
+            _strip_html(item.get('content', ''))[:240] or 'Mastodon post', _strip_html(item.get('content', '')), url or source.url,
+            category=source.category, location=source.area, published_at=published,
+            raw={'author': handle, 'published_at': published, 'permalink': url,
+                 'reblogs_count': item.get('reblogs_count', 0), 'favourites_count': item.get('favourites_count', 0),
+                 '_area': source.area}))
+    return result
+
+
+def _mastodon_url(source):
+    tag = (source.hashtag or '').lstrip('#')
+    if source.url: return source.url
+    return f'https://{source.instance}/api/v1/timelines/tag/{tag}?limit=40'
+
+
+def _collect_mastodon(source, *, user_agent, timeout, max_bytes):
+    url = _mastodon_url(source); all_rows = []; pages = 0
+    while url and pages < 3 and len(all_rows) < source.max_posts_per_poll:
+        data, headers = fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, return_headers=True)
+        all_rows.extend(parse_mastodon(source, data)); pages += 1
+        link = headers.get('Link', '')
+        match = re.search(r'<([^>]+)>;\s*rel="next"', link)
+        url = match.group(1) if match else ''
+    return all_rows[:source.max_posts_per_poll]
+
+
 def parse_telegram_preview(source, data):
     """Parse Telegram's public HTML preview without fetching media."""
     html = data.decode('utf-8', 'replace')
@@ -356,6 +475,10 @@ PARSERS = {
     "tdot_events": parse_tdot,
     "telegram_preview": parse_telegram_preview,
     "acled_api": parse_acled,
+    "usgs_waterservices": parse_usgs_waterservices,
+    "epa_radnet": parse_radnet,
+    "safecast": parse_safecast,
+    "mastodon_hashtag": parse_mastodon,
 }
 
 
@@ -369,7 +492,14 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
         if not key:
             raise CollectionError(f"missing credential environment variable: {source.api_key_env}")
         headers['Authorization'] = f'Bearer {key}'
-    data=fetch_bytes(source.url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes,headers=headers)
+    if source.kind == 'mastodon_hashtag':
+        return _collect_mastodon(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
+    url = source.url
+    if source.kind == 'usgs_waterservices':
+        query = {'format': 'json', 'sites': ','.join(source.sites), 'parameterCd': ','.join(source.parameters)}
+        parsed = urlparse(url); current = parse_qs(parsed.query); current.update({k: [v] for k, v in query.items()})
+        url = urlunparse(parsed._replace(query=urlencode(current, doseq=True)))
+    data=fetch_bytes(url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes,headers=headers)
     try:
         return parser(source,data)
     except (ValueError,TypeError,KeyError,AttributeError,OverflowError) as exc:

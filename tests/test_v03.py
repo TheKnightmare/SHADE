@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dataclasses import replace
 from unittest.mock import patch
-from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, fetch_bytes, CollectionError
+from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, fetch_bytes, CollectionError
 from shade_node.db import connect, ingest, queue, claim_detail, housekeeping, transition
 from shade_node.model import Observation
 from shade_node.relevance import age, remaining, evaluate, DEFAULT_POLICY
@@ -231,6 +231,18 @@ class AcceptanceTests(unittest.TestCase):
         ac=SourceConfig('ac','acled_api','ACLED','https://example.test','official','acled',category='civil-unrest')
         rows=parse_acled(ac,json.dumps({'data':[{'data_id':1,'event_date':'2026-09-22','event_type':'Protests','location':'Knoxville','admin1':'Tennessee','country':'United States','actor1':'Group A','fatalities':0}]}).encode())
         self.assertEqual(rows[0].category,'civil-unrest'); self.assertEqual(rows[0].source_type,'official')
+
+    def test_water_radnet_safecast_and_mastodon_fixtures(self):
+        from shade_node.model import SourceConfig
+        water=SourceConfig('water','usgs_waterservices','Water','https://example.test','official','usgs-waterservices',category='regional',area='ETN/WNC',threshold=10)
+        payload={'value':{'timeSeries':[{'sourceInfo':{'siteCode':[{'value':'123'}],'siteName':'Test River'},'variable':{'variableCode':[{'value':'00065'}],'unit':{'unitCode':'ft'}},'values':[{'value':[{'value':'12.5','dateTime':'2026-09-23T01:00:00Z'}]}]}]}}
+        rows=parse_usgs_waterservices(water,json.dumps(payload).encode()); self.assertTrue(rows[0].raw['_threshold_exceeded']); self.assertEqual(rows[0].severity,'severe')
+        rad=SourceConfig('rad','epa_radnet','RadNet','https://example.test','official','epa-radnet',category='radiological',area='TN')
+        rows=parse_radnet(rad,b'Date/Time,Location,Exposure Rate,Unit\n2026-09-23T01:00:00Z,Knoxville,0.12,mR/h\n'); self.assertEqual(rows[0].category,'radiological')
+        safe=SourceConfig('safe','safecast','Safe','https://example.test','community','safecast',category='radiological')
+        rows=parse_safecast(safe,b'{"measurements":[{"id":7,"value":0.1,"unit":"uSv/h","captured_at":"2026-09-23T01:00:00Z","latitude":35,"longitude":-84}]}'); self.assertEqual(rows[0].source_type,'community')
+        mast=SourceConfig('mast','mastodon_hashtag','Mastodon','https://example.test','community','mastodon-example-Iran',category='chatter')
+        rows=parse_mastodon(mast,b'[{"id":"9","url":"https://example/@a/9","created_at":"2026-09-23T01:00:00Z","content":"<p>#Iran update</p>","account":{"acct":"a@example"}}]'); self.assertEqual(rows[0].raw['author'],'a@example')
 
     def test_trusted_relay_can_advance_without_being_official(self):
         trusted=obs(source_type='community',source_family='s2-underground-wire',category='chatter',

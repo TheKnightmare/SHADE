@@ -174,6 +174,22 @@ alone.
 Silence is a valid product. “No bulletin; monitoring continues” is better than
 filling airtime with weakly sourced chatter.
 
+## Environmental and Fediverse additions
+
+USGS Water Services, EPA RadNet, and Safecast are additive monitoring layers,
+not replacements for local emergency-management or utility sources. Configure
+USGS site numbers explicitly; discharge (`00060`) and gage height (`00065`) are
+the defaults. A threshold is a review aid, not an automatic flood declaration.
+RadNet is the official radiological lane. Safecast is volunteer/community
+evidence: one sensor is never enough to transmit, and should be checked against
+RadNet or multiple independent sensors.
+
+Mastodon hashtag timelines discover local effects of national or international
+stories, but each instance is only a partial view of the federated network.
+SHADE follows pagination and stores text and links without media. Keep polling
+at 30–60 minutes per instance and treat repeated federated posts as one family
+unless an independent source confirms them.
+
 ## Source-handling rules
 
 - A source family is the origin, not the URL. Mirrors and reposts count once.

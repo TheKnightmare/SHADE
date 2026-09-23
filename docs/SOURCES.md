@@ -110,6 +110,32 @@ attribution and labels the claim `TRUSTED-RELAY`; it does not relabel the source
 as official or silently merge it with another family.
 The full S2 watcher map is documented in [S2_WATCHER.md](S2_WATCHER.md).
 
+## Water and radiological monitoring
+
+`usgs_waterservices` reads configured USGS Instantaneous Values gauge sites for
+discharge (`00060`) and gage height (`00065`) by default. Site numbers are
+operator configuration, not guessed by SHADE. A configured threshold raises
+the normal significance through the existing severity/scoring path.
+
+`epa_radnet` uses EPA's documented near-real-time CSV downloads. RadNet
+stations provide official background and exposure monitoring; EPA notes that
+elevated readings are reviewed by trained scientists. `safecast` uses the
+public, keyless volunteer-sensor API and remains community evidence. A single
+Safecast reading crossing a threshold is not sufficient: sensor drift and
+hardware faults are real failure modes. Treat it seriously only when a RadNet
+station agrees or multiple independent Safecast sensors agree. This is a
+hardware-reliability safeguard, distinct from the general community rule.
+
+## Mastodon / Fediverse
+
+`mastodon_hashtag` polls each configured instance's public hashtag timeline,
+follows the instance's `Link` pagination, stores text/metadata/links only, and
+never captures media. Source families include both instance and hashtag (for
+example `mastodon-mastodon.social-Iran`). Coverage from one instance is
+partial by design: federation does not provide a universal firehose, and this
+is not a bug to work around. Rate limits are budgeted per instance, not
+globally.
+
 ## IRC
 
 SHADE does not currently poll IRC. IRC is a persistent, server/channel

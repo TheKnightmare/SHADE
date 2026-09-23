@@ -11,7 +11,7 @@ DEFAULT_POLICY = {
     'local_counties': ['Knox, TN','Blount, TN','Sevier, TN','Anderson, TN','Loudon, TN','Roane, TN','Monroe, TN','McMinn, TN','Bradley, TN','Hamilton, TN','Campbell, TN','Claiborne, TN','Union, TN','Grainger, TN','Jefferson, TN','Hamblen, TN','Cocke, TN','Greene, TN','Washington, TN','Sullivan, TN','Carter, TN','Johnson, TN','Unicoi, TN','Hawkins, TN','Hancock, TN','Scott, TN','Morgan, TN','Cumberland, TN','Bledsoe, TN','Rhea, TN','Meigs, TN','Polk, TN','Sequatchie, TN','Marion, TN','Buncombe, NC','Haywood, NC','Henderson, NC','Madison, NC','Yancey, NC','Mitchell, NC','Avery, NC','Watauga, NC','Ashe, NC','Alleghany, NC','Wilkes, NC','Caldwell, NC','Burke, NC','McDowell, NC','Rutherford, NC','Polk, NC','Transylvania, NC','Jackson, NC','Swain, NC','Macon, NC','Graham, NC','Clay, NC','Cherokee, NC'],
     'category_priorities': {},
 }
-OPERATIONAL = {'cyber','infrastructure','grid','fuel','communications','transportation','supply-chain','public-health','public-safety','emergency','chatter','top-news','civil-unrest'}
+OPERATIONAL = {'cyber','infrastructure','grid','fuel','communications','transportation','supply-chain','public-health','public-safety','emergency','chatter','top-news','civil-unrest','regional','radiological'}
 LIFE_SAFETY = {'Tornado Warning','Flash Flood Warning','Civil Emergency Message','Evacuation Immediate','Shelter In Place Warning','Extreme Wind Warning','Tsunami Warning'}
 
 

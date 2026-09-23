@@ -8,6 +8,44 @@ max_age_hours = 168
 # [collection]
 # user_agent = "SHADE/0.3 (set-a-real-contact@example.invalid)"
 
+[[sources]]
+id = "usgs-water-placeholder"
+kind = "usgs_waterservices"
+name = "USGS Water Services gauge placeholder"
+url = "https://waterservices.usgs.gov/nwis/iv/"
+source_type = "official"
+source_family = "usgs-waterservices"
+category = "regional"
+area = "ETN/WNC"
+enabled = false
+sites = ["SITE_NUMBER_HERE"]
+parameters = ["00060", "00065"]
+min_poll_seconds = 900
+
+[[sources]]
+id = "epa-radnet-knoxville"
+kind = "epa_radnet"
+name = "EPA RadNet Knoxville"
+url = "https://radnet.epa.gov/cdx-radnet-rest/api/rest/csv/2026/fixed/tn/knoxville"
+source_type = "official"
+source_family = "epa-radnet"
+category = "radiological"
+area = "Knoxville TN"
+enabled = false
+min_poll_seconds = 3600
+
+[[sources]]
+id = "safecast-radiation"
+kind = "safecast"
+name = "Safecast volunteer radiation readings"
+url = "https://api.safecast.org/measurements.json?per_page=100"
+source_type = "community"
+source_family = "safecast"
+category = "radiological"
+area = "ETN/WNC"
+enabled = false
+min_poll_seconds = 3600
+
 # Operator-approved chatter only. Mirrors must share the originating family.
 [[sources]]
 id = "community-example"
@@ -148,3 +186,121 @@ category = "civil-unrest"
 enabled = false
 api_key_env = "ACLED_API_KEY"
 min_poll_seconds = 3600
+
+# Public Mastodon hashtag timelines (disabled by default; enable selectively).
+[[sources]]
+id = "mastodon-social-iran"
+kind = "mastodon_hashtag"
+name = "mastodon.social #Iran"
+url = "https://mastodon.social/api/v1/timelines/tag/Iran?limit=40"
+source_type = "community"
+source_family = "mastodon-mastodon.social-Iran"
+category = "top-news"
+enabled = false
+instance = "mastodon.social"
+hashtag = "Iran"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-social-ukraine"
+kind = "mastodon_hashtag"
+name = "mastodon.social #Ukraine"
+url = "https://mastodon.social/api/v1/timelines/tag/Ukraine?limit=40"
+source_type = "community"
+source_family = "mastodon-mastodon.social-Ukraine"
+category = "top-news"
+enabled = false
+instance = "mastodon.social"
+hashtag = "Ukraine"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-social-redsea"
+kind = "mastodon_hashtag"
+name = "mastodon.social #RedSea"
+url = "https://mastodon.social/api/v1/timelines/tag/RedSea?limit=40"
+source_type = "community"
+source_family = "mastodon-mastodon.social-RedSea"
+category = "top-news"
+enabled = false
+instance = "mastodon.social"
+hashtag = "RedSea"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-social-ice"
+kind = "mastodon_hashtag"
+name = "mastodon.social #ICE"
+url = "https://mastodon.social/api/v1/timelines/tag/ICE?limit=40"
+source_type = "community"
+source_family = "mastodon-mastodon.social-ICE"
+category = "civil-unrest"
+enabled = false
+instance = "mastodon.social"
+hashtag = "ICE"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-social-tornado"
+kind = "mastodon_hashtag"
+name = "mastodon.social #tornado"
+url = "https://mastodon.social/api/v1/timelines/tag/tornado?limit=40"
+source_type = "community"
+source_family = "mastodon-mastodon.social-tornado"
+category = "weather"
+enabled = false
+instance = "mastodon.social"
+hashtag = "tornado"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-social-flooding"
+kind = "mastodon_hashtag"
+name = "mastodon.social #flooding"
+url = "https://mastodon.social/api/v1/timelines/tag/flooding?limit=40"
+source_type = "community"
+source_family = "mastodon-mastodon.social-flooding"
+category = "weather"
+enabled = false
+instance = "mastodon.social"
+hashtag = "flooding"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-infosec-infosec"
+kind = "mastodon_hashtag"
+name = "infosec.exchange #infosec"
+url = "https://infosec.exchange/api/v1/timelines/tag/infosec?limit=40"
+source_type = "community"
+source_family = "mastodon-infosec.exchange-infosec"
+category = "cyber"
+enabled = false
+instance = "infosec.exchange"
+hashtag = "infosec"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-infosec-cybersecurity"
+kind = "mastodon_hashtag"
+name = "infosec.exchange #cybersecurity"
+url = "https://infosec.exchange/api/v1/timelines/tag/cybersecurity?limit=40"
+source_type = "community"
+source_family = "mastodon-infosec.exchange-cybersecurity"
+category = "cyber"
+enabled = false
+instance = "infosec.exchange"
+hashtag = "cybersecurity"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "mastodon-infosec-cve"
+kind = "mastodon_hashtag"
+name = "infosec.exchange #CVE"
+url = "https://infosec.exchange/api/v1/timelines/tag/CVE?limit=40"
+source_type = "community"
+source_family = "mastodon-infosec.exchange-CVE"
+category = "cyber"
+enabled = false
+instance = "infosec.exchange"
+hashtag = "CVE"
+min_poll_seconds = 1800

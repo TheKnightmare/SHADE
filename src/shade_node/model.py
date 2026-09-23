@@ -93,12 +93,21 @@ class SourceConfig:
     api_key_env: str = ""
     max_posts_per_poll: int = 100
     trusted_for_relay: bool = False
+    sites: list[str] = field(default_factory=list)
+    parameters: list[str] = field(default_factory=lambda: ['00060', '00065'])
+    threshold: float | None = None
+    instance: str = ''
+    hashtag: str = ''
 
     def __post_init__(self):
         from urllib.parse import urlsplit
         parsed=urlsplit(self.url)
         if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError('Sources require HTTPS URLs without embedded credentials')
+        if self.kind == 'mastodon_hashtag' and not self.source_family.strip():
+            instance = self.instance or parsed.hostname or 'instance'
+            hashtag = (self.hashtag or '').lstrip('#') or 'tag'
+            self.source_family = f'mastodon-{instance}-{hashtag}'
         if not self.source_family.strip(): raise ValueError('Every source needs an originating family')
         if self.source_type not in {'official','community','media'}: raise ValueError('Invalid source type')
         if self.min_poll_seconds < 60: raise ValueError('Source polling interval must be at least 60 seconds')
