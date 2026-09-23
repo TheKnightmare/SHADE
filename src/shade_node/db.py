@@ -142,6 +142,7 @@ def recompute_claim(connection: sqlite3.Connection, claim_id: int) -> None:
     official = {row["source_family"] for row in rows if row["source_type"] == "official"}
     community = {row["source_family"] for row in rows if row["source_type"] == "community"}
     media = {row["source_family"] for row in rows if row["source_type"] == "media"}
+    trusted = any(json.loads(row["raw_json"]).get("_trusted_for_relay") for row in connection.execute("SELECT raw_json FROM observations WHERE claim_id=?", (claim_id,)))
     corroborating = official | media
     if official and len(families) >= 2:
         label, confidence = "CONFIRMED", 90
@@ -149,6 +150,8 @@ def recompute_claim(connection: sqlite3.Connection, claim_id: int) -> None:
         label, confidence = "CORROBORATED", 60
     elif official:
         label, confidence = "OFFICIAL-REPORT", 75
+    elif trusted:
+        label, confidence = "TRUSTED-RELAY", 75
     elif community:
         label, confidence = "UNVERIFIED", 20
     else:
@@ -249,8 +252,8 @@ def transition(connection: sqlite3.Connection, claim_id: int, new_status: str) -
         raise ValueError(f"claim {claim_id} not found")
     new_status = new_status.upper()
     if new_status == "TX_CANDIDATE":
-        evidence = connection.execute("SELECT source_type FROM observations WHERE claim_id=?", (claim_id,)).fetchall()
-        if not any(row["source_type"] in {"official", "media"} for row in evidence):
+        evidence = connection.execute("SELECT source_type,raw_json FROM observations WHERE claim_id=?", (claim_id,)).fetchall()
+        if not any(row["source_type"] in {"official", "media"} or json.loads(row["raw_json"]).get("_trusted_for_relay") for row in evidence):
             raise ValueError("TX_CANDIDATE requires at least one official or media source family")
     if new_status not in ALLOWED_TRANSITIONS.get(row["status"], set()):
         raise ValueError(f"invalid transition {row['status']} -> {new_status}")

@@ -232,6 +232,15 @@ class AcceptanceTests(unittest.TestCase):
         rows=parse_acled(ac,json.dumps({'data':[{'data_id':1,'event_date':'2026-09-22','event_type':'Protests','location':'Knoxville','admin1':'Tennessee','country':'United States','actor1':'Group A','fatalities':0}]}).encode())
         self.assertEqual(rows[0].category,'civil-unrest'); self.assertEqual(rows[0].source_type,'official')
 
+    def test_trusted_relay_can_advance_without_being_official(self):
+        trusted=obs(source_type='community',source_family='s2-underground-wire',category='chatter',
+                    title='Major outage reported near Knoxville',raw={'_area':'Knoxville','_trusted_for_relay':True})
+        with connect(':memory:') as db:
+            claim_id,_=ingest(db,trusted)
+            row,_=claim_detail(db,claim_id,now=NOW)
+            self.assertEqual(row['confidence_label'],'TRUSTED-RELAY')
+            transition(db,claim_id,'REVIEW'); transition(db,claim_id,'TX_CANDIDATE')
+
     def test_bulletin_split_and_numbering(self):
         parts=split_message('Sentence one. Sentence two with enough words to split cleanly.', 24)
         self.assertTrue(all(len(part)<=24 for part in parts)); self.assertEqual(''.join(parts).replace(' ',''), 'Sentenceone.Sentencetwowithenoughwordstosplitcleanly.')

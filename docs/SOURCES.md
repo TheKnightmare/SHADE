@@ -103,3 +103,8 @@ community families repeat it. Fast-moving unrest channels frequently mirror one
 another, so repeated community claims can be one rumor propagating. A claim
 requires at least one official or media family before it may advance to
 `TX_CANDIDATE`; ACLED counts as official.
+
+The operator may designate a named superior relay such as S2 Underground Wire
+with `trusted_for_relay = true`. SHADE preserves that source's family and text
+attribution and labels the claim `TRUSTED-RELAY`; it does not relabel the source
+as official or silently merge it with another family.

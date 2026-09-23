@@ -45,6 +45,18 @@ category = "chatter"
 enabled = false
 min_poll_seconds = 3600
 
+[[sources]]
+id = "telegram-s2-underground-wire"
+kind = "telegram_preview"
+name = "S2 Underground Wire"
+url = "https://t.me/s/S2UndergroundWire"
+source_type = "community"
+source_family = "s2-underground-wire"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
+trusted_for_relay = true
+
 # ACLED US Crisis Monitor (requires an operator-provided key).
 [[sources]]
 id = "acled-us"

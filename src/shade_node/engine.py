@@ -164,6 +164,8 @@ def run_once(settings: Settings, mode: str | None = None) -> dict:
                     connection.execute('INSERT OR REPLACE INTO source_presence(source_id,external_id,asof,active) VALUES(?,?,?,1)',
                                        (item.source_id,item.external_id,iso(utc_now())))
             for observation in observations:
+                if configured_source.trusted_for_relay:
+                    observation.raw['_trusted_for_relay'] = True
                 try:
                     published = datetime.fromisoformat(observation.published_at.replace("Z", "+00:00"))
                 except ValueError:
