@@ -153,3 +153,20 @@ Mastodon derives tag-safe candidates only from local and regional terms;
 national and global terms remain keyword-only. `google_news_search` can query a
 whole tier or an explicit per-source term list. Matching remains exact/simple;
 SHADE does not generate, expand, or fuzzy-match keywords.
+
+## Nationwide work zones and chokepoints
+
+`wzdx_registry` uses the USDOT ITS DataHub WZDx Feed Registry at
+`https://data.transportation.gov/api/v3/views/69qe-yiui/query.json?accessType=DOWNLOAD`
+to discover currently listed feeds, then polls each registered WZDx JSON or
+GeoJSON endpoint. Dead, inactive, expired, or temporarily unreachable feeds are
+skipped so a stale registry entry cannot fail the nationwide collection. Feed
+keys are supplied through `api_key_env`; credentials are never stored in TOML.
+
+WZDx is primarily planned work-zone data. Emergency and disaster-driven closure
+coverage varies by state and is not guaranteed. This collector supplements,
+rather than replaces, state incident feeds such as TDOT SmartWay and NCDOT TIMS.
+The draft national registry in `chokepoints.toml` is deliberately unverified;
+confirm entries against the FHWA National Bridge Inventory or the responsible
+state DOT before treating them as final. Chokepoint matches use the existing
+relevance boost path and do not introduce a new score.

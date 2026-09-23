@@ -1,0 +1,108 @@
+# Curated national chokepoints. Draft entries require confirmation against
+# FHWA's National Bridge Inventory or the responsible state DOT before being
+# treated as final. Incident-source names are advisory coverage pointers.
+
+[[chokepoints]]
+id = "mississippi-river-i-crossings"
+name = "Mississippi River I-## crossings"
+note = "Draft family; select the specific bridge and state DOT before transmission."
+watch_usgs_sites = []
+incident_sources = ["state DOT incident feeds"]
+
+[[chokepoints]]
+id = "mackinac-bridge"
+name = "Mackinac Bridge (I-75 MI)"
+note = "Draft; verify bridge/operator and closure source."
+watch_usgs_sites = []
+incident_sources = ["Michigan 511"]
+
+[[chokepoints]]
+id = "chesapeake-bay-bridge-tunnel"
+name = "Chesapeake Bay Bridge-Tunnel (I-64/US-13)"
+note = "Draft; verify current route and operator feed."
+watch_usgs_sites = []
+incident_sources = ["Virginia 511"]
+
+[[chokepoints]]
+id = "hernando-de-soto-bridge"
+name = "Hernando de Soto Bridge (I-40 Memphis)"
+note = "Draft; verify bridge and Tennessee/Arkansas incident coverage."
+watch_usgs_sites = []
+incident_sources = ["TDOT SmartWay", "IDrive Arkansas"]
+
+[[chokepoints]]
+id = "i5-grapevine-siskiyou"
+name = "I-5 Grapevine / Siskiyou Pass"
+note = "Draft; two separate mountain chokepoints requiring state confirmation."
+watch_usgs_sites = []
+incident_sources = ["Caltrans QuickMap", "TripCheck Oregon"]
+
+[[chokepoints]]
+id = "i80-donner-pass"
+name = "I-80 Donner Pass"
+note = "Draft; verify Caltrans route segment."
+watch_usgs_sites = []
+incident_sources = ["Caltrans QuickMap"]
+
+[[chokepoints]]
+id = "i70-eisenhower-tunnel"
+name = "I-70 Eisenhower Tunnel"
+note = "Draft; verify Colorado DOT incident source."
+watch_usgs_sites = []
+incident_sources = ["COtrip"]
+
+[[chokepoints]]
+id = "i90-snoqualmie-pass"
+name = "I-90 Snoqualmie Pass"
+note = "Draft; verify Washington DOT pass conditions."
+watch_usgs_sites = []
+incident_sources = ["WSDOT"]
+
+[[chokepoints]]
+id = "i10-twin-span"
+name = "I-10 Twin Span (Louisiana)"
+note = "Draft; verify Louisiana DOTD closure source."
+watch_usgs_sites = []
+incident_sources = ["511 Louisiana"]
+
+[[chokepoints]]
+id = "i90-seattle-floating-bridges"
+name = "I-90 Seattle floating bridges"
+note = "Draft; verify WSDOT bridge/closure coverage."
+watch_usgs_sites = []
+incident_sources = ["WSDOT"]
+
+[[chokepoints]]
+id = "i40-pigeon-river-gorge"
+name = "I-40 Pigeon River Gorge (TN/NC)"
+note = "Draft ETN/WNC entry; verify route and closure coverage."
+watch_usgs_sites = []
+incident_sources = ["TDOT SmartWay", "NCDOT TIMS"]
+
+[[chokepoints]]
+id = "i40-i75-knoxville"
+name = "I-40/I-75 Knoxville interchange"
+note = "Draft ETN entry; verify interchange segment."
+watch_usgs_sites = []
+incident_sources = ["TDOT SmartWay"]
+
+[[chokepoints]]
+id = "i81-east-tennessee"
+name = "I-81 East Tennessee"
+note = "Draft ETN entry; verify highest-impact segments."
+watch_usgs_sites = []
+incident_sources = ["TDOT SmartWay"]
+
+[[chokepoints]]
+id = "us441-smokies"
+name = "US-441 Great Smoky Mountains crossing"
+note = "Draft ETN/WNC entry; verify NPS and state closure sources."
+watch_usgs_sites = []
+incident_sources = ["TDOT SmartWay", "NCDOT TIMS", "NPS"]
+
+[[chokepoints]]
+id = "i26-asheville"
+name = "I-26 Asheville corridor"
+note = "Draft WNC entry; verify state incident coverage."
+watch_usgs_sites = []
+incident_sources = ["NCDOT TIMS"]

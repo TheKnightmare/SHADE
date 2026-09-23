@@ -401,6 +401,74 @@ def parse_mastodon(source, data):
     return result
 
 
+def _wzdx_state(row):
+    return str(row.get('state') or row.get('state_code') or row.get('state_abbreviation') or 'US').upper()
+
+
+def _wzdx_registry_rows(data):
+    payload = _json(data)
+    if isinstance(payload, dict):
+        rows = payload.get('results') or payload.get('data') or payload.get('feeds') or payload.get('features') or []
+    else:
+        rows = payload
+    result = []
+    for item in rows if isinstance(rows, list) else []:
+        row = item.get('properties', item) if isinstance(item, dict) else {}
+        url = row.get('feed_url') or row.get('feedUrl') or row.get('api_url') or row.get('url') or row.get('feed')
+        status = str(row.get('status') or row.get('feed_status') or 'active').lower()
+        end = row.get('end_date') or row.get('endDate') or row.get('expiration_date')
+        if not url or status in {'inactive', 'dead', 'retired', 'expired', 'removed'}:
+            continue
+        if end and timestamp(str(end)) and datetime.fromisoformat(iso_utc(str(end)).replace('Z', '+00:00')) <= datetime.now(timezone.utc):
+            continue
+        result.append((row, str(url)))
+    return result
+
+
+def parse_wzdx_feed(source, data, *, state='US', feed_url=None):
+    payload = _json(data)
+    features = payload.get('features', []) if isinstance(payload, dict) else []
+    observations = []
+    for feature in features if isinstance(features, list) else []:
+        props = feature.get('properties', {}) or {}
+        core = props.get('core_details', {}) or {}
+        road_names = core.get('road_names') or props.get('road_names') or props.get('roadName') or []
+        if isinstance(road_names, list): road = ', '.join(str(x) for x in road_names)
+        else: road = str(road_names or '')
+        event_type = core.get('event_type') or props.get('event_type') or props.get('eventType') or 'work zone'
+        description = core.get('description') or props.get('description') or props.get('name') or ''
+        start = core.get('start_date') or props.get('start_date') or props.get('startDate') or ''
+        end = core.get('end_date') or props.get('end_date') or props.get('endDate') or ''
+        geometry = feature.get('geometry') or {}
+        location = road or json.dumps(geometry, separators=(',', ':'))
+        external = str(feature.get('id') or props.get('road_event_id') or props.get('id') or f'{road}|{start}|{event_type}')
+        observations.append(Observation(source.id, source.name, 'official', f'wzdx-{state}', external,
+            f'{event_type}: {road or "work zone"}', f'{description} Start: {start}; end: {end}.', feed_url or source.url,
+            category='transportation', location=location, severity='moderate', published_at=start,
+            raw={**feature, '_start': start, '_end': end, '_road': road, '_event_type': event_type, '_area': state}))
+    return observations
+
+
+def _collect_wzdx_registry(source, *, user_agent, timeout, max_bytes):
+    headers = {}
+    key = os.environ.get(source.api_key_env, '') if source.api_key_env else ''
+    if source.api_key_env and not key:
+        raise CollectionError(f'missing credential environment variable: {source.api_key_env}')
+    if key: headers['Authorization'] = f'Bearer {key}'
+    registry = fetch_bytes(source.url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)
+    observations = []
+    for row, url in _wzdx_registry_rows(registry):
+        try:
+            data = fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)
+            state = _wzdx_state(row)
+            observations.extend(parse_wzdx_feed(source, data, state=state, feed_url=url))
+        except CollectionError:
+            # Registry membership is not proof that a feed is live; stale feeds
+            # are skipped so one dead provider cannot fail the nationwide run.
+            continue
+    return observations
+
+
 def _mastodon_url(source):
     tag = (source.hashtag or '').lstrip('#')
     if source.url: return source.url
@@ -485,6 +553,7 @@ PARSERS = {
     "safecast": parse_safecast,
     "mastodon_hashtag": parse_mastodon,
     "google_news_search": parse_rss,
+    "wzdx_registry": parse_wzdx_feed,
 }
 
 
@@ -500,6 +569,8 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
         headers['Authorization'] = f'Bearer {key}'
     if source.kind == 'mastodon_hashtag':
         return _collect_mastodon(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
+    if source.kind == 'wzdx_registry':
+        return _collect_wzdx_registry(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
     if source.kind == 'google_news_search':
         terms = source.query_terms or source.keywords.get(source.keyword_tier, [])
         if not terms:

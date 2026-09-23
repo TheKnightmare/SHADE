@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dataclasses import replace
 from unittest.mock import patch
-from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, fetch_bytes, CollectionError
+from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, parse_wzdx_feed, fetch_bytes, CollectionError
 from shade_node.db import connect, ingest, queue, claim_detail, housekeeping, transition
 from shade_node.model import Observation
 from shade_node.relevance import age, remaining, evaluate, DEFAULT_POLICY
@@ -253,6 +253,17 @@ class AcceptanceTests(unittest.TestCase):
         self.assertNotIn('Iran', hashtags(catalog))
         google = SourceConfig('news', 'google_news_search', 'Google', 'https://news.google.com/rss/search', 'media', 'google-news', keyword_tier='national', keywords=catalog)
         self.assertIn('fuel shortage', google.keywords['national'])
+
+    def test_wzdx_feed_normalization_and_stale_registry_skip(self):
+        from shade_node.collectors import _wzdx_registry_rows
+        from shade_node.model import SourceConfig
+        wz = SourceConfig('wz', 'wzdx_registry', 'WZDx', 'https://example.test/registry', 'official', 'wzdx-registry')
+        payload = {'type':'FeatureCollection','features':[{'id':'evt-1','geometry':{'type':'Point','coordinates':[-84,36]},'properties':{'core_details':{'road_names':['I-40'],'event_type':'lane closure','start_date':'2026-09-23T01:00:00Z','end_date':'2026-09-24T01:00:00Z','description':'overnight work'}}}]}
+        row = parse_wzdx_feed(wz, json.dumps(payload).encode(), state='TN')[0]
+        self.assertEqual(row.source_family, 'wzdx-TN')
+        self.assertIn('I-40', row.location)
+        registry = {'results':[{'state':'TN','status':'inactive','feed_url':'https://dead.test/feed'},{'state':'NC','status':'active','feed_url':'https://live.test/feed'}]}
+        self.assertEqual(_wzdx_registry_rows(json.dumps(registry).encode()), [({'state':'NC','status':'active','feed_url':'https://live.test/feed'}, 'https://live.test/feed')])
 
     def test_trusted_relay_can_advance_without_being_official(self):
         trusted=obs(source_type='community',source_family='s2-underground-wire',category='chatter',

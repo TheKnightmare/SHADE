@@ -18,6 +18,20 @@ min_poll_seconds = 1800
 [relevance]
 minimum_score = 45
 max_age_hours = 168
+
+[[sources]]
+id = "wzdx-registry"
+kind = "wzdx_registry"
+name = "USDOT WZDx Feed Registry"
+url = "https://data.transportation.gov/api/v3/views/69qe-yiui/query.json?accessType=DOWNLOAD"
+source_type = "official"
+source_family = "wzdx-registry"
+category = "transportation"
+enabled = false
+min_poll_seconds = 1800
+# If a registered feed requires authentication, set api_key_env to the
+# operator-approved environment variable; never put the key in TOML.
+# api_key_env = "WZDX_API_KEY"
 # Optional request contact override without changing the base station file:
 # [collection]
 # user_agent = "SHADE/0.3 (set-a-real-contact@example.invalid)"
