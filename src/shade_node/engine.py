@@ -12,7 +12,7 @@ from .model import utc_now
 from .collectors import CollectionError, collect
 from .db import connect, ingest
 from .model import SourceConfig
-from .keywords import load_keywords
+from .keywords import load_keywords, normalize_keywords
 from urllib.parse import urlparse
 
 
@@ -56,8 +56,13 @@ def load_settings(path: str) -> Settings:
     if not keyword_path.exists():
         keyword_path = Path(__file__).resolve().parents[2] / "keywords.toml"
     if not keyword_path.exists():
-        raise ValueError(f"keywords.toml not found beside {config_path} or repository root")
-    keywords = load_keywords(keyword_path)
+        packaged_keywords = resources.files('shade_node').joinpath('keywords.toml')
+        if packaged_keywords.is_file():
+            keywords = normalize_keywords(tomllib.loads(packaged_keywords.read_text(encoding='utf-8')))
+        else:
+            raise ValueError(f"keywords.toml not found beside {config_path} or repository root")
+    else:
+        keywords = load_keywords(keyword_path)
     local_path=config_path.with_name('config.local.toml')
     if local_path.exists() and local_path != config_path:
         with local_path.open('rb') as handle: local=tomllib.load(handle)

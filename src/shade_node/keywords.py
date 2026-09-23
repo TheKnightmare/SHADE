@@ -5,9 +5,7 @@ import re
 
 TIERS = ("local", "regional", "national", "global")
 
-def load_keywords(path: str | Path) -> dict[str, list[str]]:
-    with Path(path).open("rb") as handle:
-        payload = tomllib.load(handle)
+def normalize_keywords(payload: dict) -> dict[str, list[str]]:
     result = {}
     sections = payload.get("keywords", {})
     for tier in TIERS:
@@ -17,6 +15,10 @@ def load_keywords(path: str | Path) -> dict[str, list[str]]:
             raise ValueError(f"Invalid keywords.{tier}.terms")
         result[tier] = list(dict.fromkeys(term.strip() for term in terms if term.strip()))
     return result
+
+def load_keywords(path: str | Path) -> dict[str, list[str]]:
+    with Path(path).open("rb") as handle:
+        return normalize_keywords(tomllib.load(handle))
 
 def tag_safe(term: str) -> str:
     return re.sub(r"[^\w]", "", term, flags=re.UNICODE)
