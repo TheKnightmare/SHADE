@@ -12,6 +12,7 @@ from .model import utc_now
 from .collectors import CollectionError, collect
 from .db import connect, ingest
 from .model import SourceConfig
+from .keywords import load_keywords
 
 
 @dataclass(slots=True)
@@ -33,6 +34,7 @@ class Settings:
     emcomm_max_message_chars: int
     sources: list[SourceConfig]
     policy: dict = field(default_factory=dict)
+    keywords: dict[str, list[str]] = field(default_factory=dict)
 
 
 VALID_MODES = {"standard", "exercise", "actual"}
@@ -49,6 +51,12 @@ def load_settings(path: str) -> Settings:
     config_path = Path(path)
     with config_path.open("rb") as handle:
         payload = tomllib.load(handle)
+    keyword_path = config_path.parent / "keywords.toml"
+    if not keyword_path.exists():
+        keyword_path = Path(__file__).resolve().parents[2] / "keywords.toml"
+    if not keyword_path.exists():
+        raise ValueError(f"keywords.toml not found beside {config_path} or repository root")
+    keywords = load_keywords(keyword_path)
     local_path=config_path.with_name('config.local.toml')
     if local_path.exists() and local_path != config_path:
         with local_path.open('rb') as handle: local=tomllib.load(handle)
@@ -74,6 +82,8 @@ def load_settings(path: str) -> Settings:
     operation = payload.get("operation", {})
     emcomm = payload.get("emcomm", {})
     sources = [SourceConfig(**item) for item in payload.get("sources", [])]
+    for source in sources:
+        source.keywords = keywords
     database = str(collection.get("database", "data/shade.db"))
     if not Path(database).is_absolute():
         database = str((config_path.parent / database).resolve())
@@ -95,6 +105,7 @@ def load_settings(path: str) -> Settings:
         emcomm_max_message_chars=int(emcomm.get("max_message_chars", operator.get("max_message_chars", 500))),
         sources=sources,
         policy=policy,
+        keywords=keywords,
     )
 
 

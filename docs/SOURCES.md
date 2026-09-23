@@ -143,3 +143,13 @@ transport rather than an HTTPS feed, so a safe read-only collector would need
 the exact network, TLS server/port, channel names, nick/registration policy,
 and an explicit retention/rate-limit decision. No IRC credentials or chat
 transcripts are collected implicitly.
+
+## Shared keyword catalog
+
+`keywords.toml` is loaded alongside the station configuration at startup. Its
+`keywords.local`, `keywords.regional`, `keywords.national`, and
+`keywords.global` blocks are the single source for query-driven collectors.
+Mastodon derives tag-safe candidates only from local and regional terms;
+national and global terms remain keyword-only. `google_news_search` can query a
+whole tier or an explicit per-source term list. Matching remains exact/simple;
+SHADE does not generate, expand, or fuzzy-match keywords.

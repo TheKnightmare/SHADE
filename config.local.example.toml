@@ -1,6 +1,20 @@
 # Copy to config.local.toml only if that file does not exist; merge otherwise.
 [source_packs]
 enabled = ["cyber", "communications", "energy", "regional", "transportation", "local-official", "local-community", "top-news"]
+
+# Keyword-driven Google News RSS search. Set keyword_tier to local, regional,
+# national, or global; or provide query_terms for a single explicit term.
+[[sources]]
+id = "google-news-national"
+kind = "google_news_search"
+name = "Google News national keyword scan"
+url = "https://news.google.com/rss/search"
+source_type = "media"
+source_family = "google-news"
+category = "top-news"
+keyword_tier = "national"
+enabled = false
+min_poll_seconds = 1800
 [relevance]
 minimum_score = 45
 max_age_hours = 168

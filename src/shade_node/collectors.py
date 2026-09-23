@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 
 from .model import Observation, SourceConfig, iso_utc
 from .relevance import timestamp
+from .keywords import hashtags
 from hashlib import sha256
 
 
@@ -407,13 +408,17 @@ def _mastodon_url(source):
 
 
 def _collect_mastodon(source, *, user_agent, timeout, max_bytes):
-    url = _mastodon_url(source); all_rows = []; pages = 0
-    while url and pages < 3 and len(all_rows) < source.max_posts_per_poll:
-        data, headers = fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, return_headers=True)
-        all_rows.extend(parse_mastodon(source, data)); pages += 1
-        link = headers.get('Link', '')
-        match = re.search(r'<([^>]+)>;\s*rel="next"', link)
-        url = match.group(1) if match else ''
+    tags = [source.hashtag.lstrip('#')] if source.hashtag else hashtags(source.keywords)
+    all_rows = []
+    for tag in tags:
+        page_url = source.url if source.hashtag and source.url else f'https://{source.instance}/api/v1/timelines/tag/{tag}?limit=40'
+        pages = 0
+        while page_url and pages < 3 and len(all_rows) < source.max_posts_per_poll:
+            data, headers = fetch_bytes(page_url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, return_headers=True)
+            all_rows.extend(parse_mastodon(source, data)); pages += 1
+            link = headers.get('Link', '')
+            match = re.search(r'<([^>]+)>;\s*rel="next"', link)
+            page_url = match.group(1) if match else ''
     return all_rows[:source.max_posts_per_poll]
 
 
@@ -479,6 +484,7 @@ PARSERS = {
     "epa_radnet": parse_radnet,
     "safecast": parse_safecast,
     "mastodon_hashtag": parse_mastodon,
+    "google_news_search": parse_rss,
 }
 
 
@@ -494,6 +500,18 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
         headers['Authorization'] = f'Bearer {key}'
     if source.kind == 'mastodon_hashtag':
         return _collect_mastodon(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
+    if source.kind == 'google_news_search':
+        terms = source.query_terms or source.keywords.get(source.keyword_tier, [])
+        if not terms:
+            raise CollectionError('google_news_search has no keyword terms')
+        observations = []
+        for term in terms:
+            parsed = urlparse(source.url)
+            query = parse_qs(parsed.query)
+            query['q'] = [term]
+            url = urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+            observations.extend(parse_rss(source, fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)))
+        return observations
     url = source.url
     if source.kind == 'usgs_waterservices':
         query = {'format': 'json', 'sites': ','.join(source.sites), 'parameterCd': ','.join(source.parameters)}

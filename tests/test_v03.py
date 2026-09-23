@@ -244,6 +244,16 @@ class AcceptanceTests(unittest.TestCase):
         mast=SourceConfig('mast','mastodon_hashtag','Mastodon','https://example.test','community','mastodon-example-Iran',category='chatter')
         rows=parse_mastodon(mast,b'[{"id":"9","url":"https://example/@a/9","created_at":"2026-09-23T01:00:00Z","content":"<p>#Iran update</p>","account":{"acct":"a@example"}}]'); self.assertEqual(rows[0].raw['author'],'a@example')
 
+    def test_shared_keywords_and_google_search_terms(self):
+        from shade_node.keywords import hashtags, load_keywords
+        from shade_node.model import SourceConfig
+        catalog = load_keywords(Path(__file__).parents[1] / 'keywords.toml')
+        self.assertIn('Knoxville', catalog['local'])
+        self.assertIn('Knoxville', hashtags(catalog))
+        self.assertNotIn('Iran', hashtags(catalog))
+        google = SourceConfig('news', 'google_news_search', 'Google', 'https://news.google.com/rss/search', 'media', 'google-news', keyword_tier='national', keywords=catalog)
+        self.assertIn('fuel shortage', google.keywords['national'])
+
     def test_trusted_relay_can_advance_without_being_official(self):
         trusted=obs(source_type='community',source_family='s2-underground-wire',category='chatter',
                     title='Major outage reported near Knoxville',raw={'_area':'Knoxville','_trusted_for_relay':True})

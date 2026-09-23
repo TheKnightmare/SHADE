@@ -98,6 +98,9 @@ class SourceConfig:
     threshold: float | None = None
     instance: str = ''
     hashtag: str = ''
+    keyword_tier: str = ''
+    query_terms: list[str] = field(default_factory=list)
+    keywords: dict[str, list[str]] = field(default_factory=dict, repr=False)
 
     def __post_init__(self):
         from urllib.parse import urlsplit

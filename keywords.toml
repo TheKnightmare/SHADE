@@ -1,0 +1,42 @@
+# Shared OSINT keyword catalog for query-driven collectors.
+# Local/regional terms may become Mastodon hashtags; national/global remain
+# keyword-only so broad concepts do not create noisy hashtag firehoses.
+[keywords.local]
+tier = "local"
+terms = [
+  "Knoxville", "Knox County", "Farragut", "Oak Ridge", "Y-12",
+  "Oak Ridge National Laboratory", "ORNL", "Anderson County TN",
+  "Blount County TN", "Maryville TN", "Alcoa TN", "Sevier County TN",
+  "Gatlinburg", "Pigeon Forge", "Clinton TN", "McGhee Tyson",
+  "Fort Loudoun Dam", "Melton Hill Dam", "Tellico Dam", "Norris Dam",
+  "Fort Loudoun Lake", "Tellico Lake", "Norris Lake", "Melton Hill Lake",
+  "Clinch River", "Holston River", "French Broad River", "Knoxville Police",
+  "Knox County Sheriff", "KUB", "I-40 Knoxville", "I-75 Knoxville", "I-640"
+]
+
+[keywords.regional]
+tier = "regional"
+terms = [
+  "East Tennessee", "Western North Carolina", "Asheville", "Chattanooga",
+  "Tri-Cities TN", "Bristol TN", "Kingsport", "Johnson City TN",
+  "Great Smoky Mountains", "Appalachian Trail", "TEMA",
+  "Tennessee Emergency Management", "NC Emergency Management", "I-26",
+  "I-81", "Tennessee Valley Authority", "TVA"
+]
+
+[keywords.national]
+tier = "national"
+terms = [
+  "ICE raid", "immigration enforcement", "National Guard deployed",
+  "civil unrest", "mass protest", "DHS", "grid failure", "blackout",
+  "fuel shortage", "diesel shortage", "cyberattack", "ransomware",
+  "critical infrastructure", "pipeline outage", "rail disruption",
+  "continuity of government", "martial law", "state of emergency"
+]
+
+[keywords.global]
+tier = "global"
+terms = [
+  "Iran", "Israel", "Houthi", "Red Sea", "Strait of Hormuz", "Ukraine",
+  "Russia", "Taiwan", "China", "NATO", "nuclear", "invasion"
+]
