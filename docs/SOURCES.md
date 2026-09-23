@@ -104,10 +104,15 @@ another, so repeated community claims can be one rumor propagating. A claim
 requires at least one official or media family before it may advance to
 `TX_CANDIDATE`; ACLED counts as official.
 
-The operator may designate a named superior relay such as S2 Underground Wire
-with `trusted_for_relay = true`. SHADE preserves that source's family and text
-attribution and labels the claim `TRUSTED-RELAY`; it does not relabel the source
-as official or silently merge it with another family.
+The operator may designate any source with `high_credibility = true`. SHADE
+preserves that source's family and attribution and labels its otherwise
+unverified claims `UNVERIFIED (HIGH-CRED SOURCE)`. This is an informational
+signal only: it never changes scoring, corroboration, or workflow eligibility.
+After reviewing a community-only claim, an operator may explicitly run
+`shade relay <id>` to create `TX_CANDIDATE (operator relay)`. The action is
+source-agnostic and written to the workflow audit log. Normal
+`shade mark <id> tx_candidate` still requires official or media evidence and
+records `TX_CANDIDATE (corroborated)`.
 The full S2 watcher map is documented in [S2_WATCHER.md](S2_WATCHER.md).
 
 ## Water and radiological monitoring
@@ -133,8 +138,9 @@ follows the instance's `Link` pagination, stores text/metadata/links only, and
 never captures media. Source families include both instance and hashtag (for
 example `mastodon-mastodon.social-Iran`). Coverage from one instance is
 partial by design: federation does not provide a universal firehose, and this
-is not a bug to work around. Rate limits are budgeted per instance, not
-globally.
+is not a bug to work around. SHADE persists one cooldown budget per instance;
+hashtags on the same instance are polled one at a time, oldest first. Telegram
+previews use one shared global budget in the same manner.
 
 ## IRC
 

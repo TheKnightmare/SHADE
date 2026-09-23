@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 import sys
 
-from .db import claim_detail, connect, queue, transition, housekeeping, backup_database, ALLOWED_TRANSITIONS
+from .db import claim_detail, connect, queue, transition, housekeeping, backup_database, ALLOWED_TRANSITIONS, MIGRATION_AUDIT_PREFIX, SCHEMA_VERSION
 from .relevance import age, remaining
 from .collectors import PARSERS
 import sqlite3
 from contextlib import closing
 from . import __version__
 from .engine import active_sources, load_settings, normalize_mode, run_once
-from .formatters import evidence_summary, traffic_message, bulletin_messages
+from .formatters import evidence_summary, traffic_message, bulletin_messages, workflow_status
 from datetime import datetime, timezone, timedelta
 
 
@@ -66,6 +66,8 @@ def parser() -> argparse.ArgumentParser:
     mark_parser = sub.add_parser("mark", help="Move a claim through the review workflow")
     mark_parser.add_argument("claim_id", type=int)
     mark_parser.add_argument("status", choices=["correlating", "review", "tx_candidate", "sent", "rejected"])
+    relay_parser = sub.add_parser("relay", help="Explicitly make a reviewed claim an operator-relay TX candidate")
+    relay_parser.add_argument("claim_id", type=int)
     return command
 
 
@@ -115,10 +117,11 @@ def _main(argv: list[str] | None = None) -> int:
         try:
             with closing(sqlite3.connect(Path(settings.database).resolve().as_uri()+'?mode=ro',uri=True)) as connection:
                 if connection.execute('PRAGMA quick_check').fetchone()[0]!='ok': issues.append('Database integrity problem')
+                if connection.execute('PRAGMA user_version').fetchone()[0] < SCHEMA_VERSION: issues.append('Database migration required; run shade migrate')
                 active_ids = {source.id for source in active_sources(settings, mode)}
                 for row in connection.execute("SELECT source_id,error FROM source_polls WHERE success=0 AND error<>''"):
                     if row[0] in active_ids:
-                        issues.append(f"Source failure: {row[0]}")
+                        issues.append(f"Source failure: {row[0]}: {row[1]}")
         except (OSError,sqlite3.Error): issues.append('Database inaccessible')
         print('MODE: '+mode.upper()+' | TRANSMISSION: human only')
         print('SOURCES: '+str(len(active_sources(settings,mode))))
@@ -126,13 +129,22 @@ def _main(argv: list[str] | None = None) -> int:
         for issue in issues: print('CHECK: '+issue)
         print('READY' if not issues else 'NOT READY')
         return 1 if issues else 0
+    migration_needed = False
+    if args.command=='migrate' and Path(settings.database).exists():
+        with closing(sqlite3.connect(Path(settings.database).resolve().as_uri()+'?mode=ro',uri=True)) as current:
+            migration_needed = current.execute('PRAGMA user_version').fetchone()[0] < SCHEMA_VERSION
     if (args.command=='migrate' or (args.command=='housekeep' and args.apply)) and Path(settings.database).exists():
         print('Backup: '+backup_database(settings.database))
-    with connect(settings.database) as connection:
+    with connect(settings.database, allow_migrate=args.command=='migrate') as connection:
         if args.command in {'migrate','housekeep'}:
             changes=housekeeping(connection,settings.policy,apply=args.command=='migrate' or args.apply,
                                  suppress=args.command=='housekeep' and args.suppress)
-            print(json.dumps({'applied':args.command=='migrate' or args.apply,'changes':changes},indent=2))
+            migration_rows = connection.execute(
+                'SELECT claim_id,tx_candidate_basis,reason FROM workflow_audit WHERE reason LIKE ? ORDER BY id',
+                (MIGRATION_AUDIT_PREFIX+'%',),
+            ).fetchall() if migration_needed else []
+            print(json.dumps({'applied':args.command=='migrate' or args.apply,'changes':changes,
+                              'tx_candidate_basis_backfills':[dict(row) for row in migration_rows]},indent=2))
         elif args.command in {'queue','inbox','now'}:
             if args.limit<1 or (args.max_age is not None and args.max_age<0): raise ValueError('Limit must be positive and age nonnegative')
             policy=dict(settings.policy)
@@ -141,10 +153,10 @@ def _main(argv: list[str] | None = None) -> int:
             rows=queue(connection,args.min_score,args.limit,lane='now' if args.command=='now' else args.lane,
                        policy=policy,category=args.category,area=args.area,status=args.status,max_age=args.max_age,include_suppressed=args.all)
             print(f'MODE {mode.upper()} | ID = claim ID | HUMAN REVIEW REQUIRED')
-            print('ID   AGE  AREA       TYPE             SIG CONF SRC STATUS       '+('REMAINING    ' if args.command=='now' else '')+'TITLE')
+            print('ID   AGE  AREA       TYPE             SIG CONFIDENCE                       SRC STATUS                         '+('REMAINING    ' if args.command=='now' else '')+'TITLE')
             for row in rows:
                 ttl=(remaining(row['expires'])+' ').ljust(13) if args.command=='now' else ''
-                print(f"{row['id']:<4} {age(row['published']):<4} {row['area']:<10} {row['category'].upper():<16} {row['score']:<3} {row['confidence_score']:<4} {row['independent_families']:<3} {row['status']:<12} {ttl}{row['title'][:85]}")
+                print(f"{row['id']:<4} {age(row['published']):<4} {row['area']:<10} {row['category'].upper():<16} {row['score']:<3} {row['confidence_label']:<32} {row['independent_families']:<3} {workflow_status(row):<30} {ttl}{row['title'][:85]}")
             if not rows: print('No matching active reports. Use --all for suppressed evidence or shade now for current weather.')
         elif args.command == "bulletin":
             match = __import__('re').fullmatch(r'(\d+(?:\.\d+)?)([mhd])', args.window.strip().lower())
@@ -204,6 +216,11 @@ def _main(argv: list[str] | None = None) -> int:
             if current['expired']: raise ValueError('Expired evidence cannot advance through the active workflow')
             transition(connection, args.claim_id, args.status.upper())
             print(f"claim {args.claim_id} -> {args.status.upper()}")
+        elif args.command == 'relay':
+            current,_=claim_detail(connection,args.claim_id,settings.policy)
+            if current['expired']: raise ValueError('Expired evidence cannot advance through the active workflow')
+            transition(connection,args.claim_id,'TX_CANDIDATE',operator_override=True)
+            print(f"claim {args.claim_id} -> TX_CANDIDATE (operator relay)")
     return 0
 
 

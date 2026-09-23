@@ -62,6 +62,8 @@ shade mark 214 review
 shade format 214
 shade bulletin --window 6h --min-score 35 --category cyber,top-news
 shade mark 214 tx_candidate
+# For a reviewed, uncorroborated exception, use the explicit audited override:
+shade relay 214
 # A licensed operator independently decides whether/how to transmit.
 shade mark 214 sent
 # Or, while permitted by the workflow:
@@ -77,6 +79,9 @@ current REVIEW and TX_CANDIDATE items, ranks them with the normal queue policy,
 splits them into numbered JS8 messages within the configured character limit,
 and writes a plain-text train under `data/exports/` (or `--output`). It does not
 change workflow state and never transmits.
+Each item is labeled `(C)` for official/media support, `(O)` for an operator
+relay, `(U-HC)` for unconfirmed high-credibility-source material, or `(U)` for
+other unconfirmed REVIEW material.
 
 ## Relevance and freshness
 
@@ -117,6 +122,11 @@ separate revisions. Repeated identical input is not inserted again. Reposts
 must share the originating `source_family`; two URLs do not establish two
 independent sources. Community-only single-family reporting is `UNVERIFIED`.
 Confidence labels describe attribution, not certainty about an event.
+The persisted claim and query-time view use the same confidence calculation.
+`high_credibility = true` adds a visible informational label without changing
+eligibility. Normal `TX_CANDIDATE` advancement records a `corroborated` basis;
+`shade relay ID` is the explicit, audited operator override and records an
+`operator_relay` basis.
 
 Correlation uses exact source-family event IDs, or conservative exact normalized
 multiword titles with equal location and a six-hour time window. Weather,
@@ -132,7 +142,9 @@ shade housekeep --suppress
 shade housekeep --suppress --apply
 ```
 
-Migration creates a verified SQLite backup before legacy schema changes and
+Migration creates a verified SQLite backup before legacy schema changes,
+including the v4 TX-candidate-basis migration. Ordinary commands refuse to
+open an older schema until `shade migrate` completes. Migration
 classifies ended items EXPIRED. Re-running it is safe. Housekeeping defaults to
 a preview; `--apply` is explicit confirmation and creates a backup. It never
 deletes evidence. Suppression only changes NEW claims; reviewed claims are not
@@ -145,7 +157,9 @@ See [source attribution and limits](docs/SOURCES.md), the
 [local chatter/top-news strategy and nightly workflow](docs/SOURCE_STRATEGY.md),
 [EmComm profiles](docs/EMCOMM.md), and [Windows scheduling](docs/SCHEDULING.md).
 Network requests are HTTPS only,
-bounded by timeout/size, with persistent per-source cooldown and error backoff.
+bounded by timeout/size, with persistent cooldown and error backoff. Telegram
+previews share one global budget; Mastodon hashtag sources share a budget per
+instance. Stored poll failures retain the actual cause shown by `shade doctor`.
 A scheduled 15-minute run can skip sources whose hourly cooldown has not elapsed.
 FAA, TDOT, and vendor incident snapshots expire after 30 minutes without a successful
 refresh; disappearance from a successful complete snapshot ends that item.

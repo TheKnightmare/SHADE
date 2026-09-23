@@ -2,9 +2,10 @@
 
 Use the wheel from the verified release. Keep the existing private config.toml
 and data/shade.db. Stop or disable any existing collector task while upgrading;
-do not delete its configuration or evidence. Upgrading from v0.3.1 requires no
-database schema change. Older v0.2 databases retain all observation rows and
-claim IDs through the existing v0.3 migration path.
+do not delete its configuration or evidence. This build adds the v4
+TX-candidate-basis schema. Existing observation rows and claim IDs are retained.
+Run `shade migrate`; ordinary commands will request migration until the verified
+backup and schema update complete.
 
 For this Station installation (PowerShell):
 

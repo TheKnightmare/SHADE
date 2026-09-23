@@ -87,14 +87,19 @@ def confidence(rows):
     families={r['source_family'] for r in rows}
     official={r['source_family'] for r in rows if r['source_type']=='official'}
     media={r['source_family'] for r in rows if r['source_type']=='media'}
-    trusted=any(json.loads(r['raw_json']).get('_trusted_for_relay') for r in rows)
+    high_credibility=any(
+        json.loads(r['raw_json']).get('_high_credibility_source')
+        or json.loads(r['raw_json']).get('_trusted_for_relay')  # legacy rows: display only
+        for r in rows
+    )
     if official and len(families)>=2: label,score='CONFIRMED',90
     elif official: label,score='OFFICIAL-REPORT',75
-    elif trusted: label,score='TRUSTED-RELAY',75
     elif len(media)>=2 or (media and len(families)>=2): label,score='CORROBORATED',60
-    elif any(r['source_type']=='community' for r in rows): label,score='UNVERIFIED',20
+    elif any(r['source_type']=='community' for r in rows):
+        label,score=('UNVERIFIED (HIGH-CRED SOURCE)',20) if high_credibility else ('UNVERIFIED',20)
     else: label,score='REPORTED',35
-    explanation=f'{len(families)} configured originating family/families; {len(official)} official. Reposts in one family count once; this label is attribution, not proof of truth.'
+    credibility=' At least one source is operator-designated high-credibility; this is informational and does not permit workflow advancement.' if high_credibility else ''
+    explanation=f'{len(families)} configured originating family/families; {len(official)} official. Reposts in one family count once; this label is attribution, not proof of truth.{credibility}'
     return label,score,len(families),len(official),explanation
 
 

@@ -1,14 +1,16 @@
 # S2 watcher layer
 
-SHADE treats S2 Underground as a trusted relay and also watches the watcher.
+SHADE treats S2 Underground Wire as an operator-designated high-credibility
+source and also watches the watcher. This designation is informational only.
 S2-originated reports retain the `s2-underground-*` family and are labeled
-`TRUSTED-RELAY`; they are never silently relabeled as government or independent
-official evidence.
+`UNVERIFIED (HIGH-CRED SOURCE)` when the configured Wire source is their only
+evidence; they are never silently relabeled as government or independent
+official evidence and never advance automatically.
 
 ## Automated sources
 
-- `@S2undergroundWire` — Wire reports; trusted relay.
-- `@s2_underground_project` — project updates; trusted relay.
+- `@S2undergroundWire` — Wire reports; high-credibility display designation.
+- `@s2_underground_project` — project updates; ordinary community evidence.
 - `s2underground/GhostMaps` GitHub Atom activity — map/KMZ changes.
 - S2 podcast RSS — longer-form reports and methodology context.
 

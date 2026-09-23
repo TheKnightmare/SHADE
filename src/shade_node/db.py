@@ -7,7 +7,7 @@ import sqlite3
 import json
 from dataclasses import asdict
 from hashlib import sha256
-from .relevance import assess, timestamp, iso
+from .relevance import assess, confidence, timestamp, iso
 
 from .model import Observation, token_set, utc_now
 
@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS claims (
     observation_count INTEGER NOT NULL DEFAULT 0,
     independent_families INTEGER NOT NULL DEFAULT 0,
     official_families INTEGER NOT NULL DEFAULT 0,
+    tx_candidate_basis TEXT CHECK(tx_candidate_basis IN ('corroborated','operator_relay') OR tx_candidate_basis IS NULL),
     UNIQUE(fingerprint)
 );
 CREATE TABLE IF NOT EXISTS observations (
@@ -55,11 +56,16 @@ CREATE INDEX IF NOT EXISTS idx_claims_queue ON claims(status, significance_score
 CREATE INDEX IF NOT EXISTS idx_observations_claim ON observations(claim_id);
 """
 
+SCHEMA_VERSION = 4
+MIGRATION_AUDIT_PREFIX = 'migration v4: backfilled TX_CANDIDATE basis as '
+LEGACY_POLL_ERROR = 'Collection failed; see run output'
+UNKNOWN_LEGACY_POLL_ERROR = 'Legacy failure cause unavailable; the next poll will record the exact error'
+
 
 def backup_database(path):
     from contextlib import closing
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    target = Path(path).with_name(Path(path).name + '.pre-v0.3-' + stamp + '.bak')
+    target = Path(path).with_name(Path(path).name + '.pre-v0.4-' + stamp + '.bak')
     with closing(sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro', uri=True)) as source:
         with closing(sqlite3.connect(target)) as destination:
             source.backup(destination)
@@ -68,8 +74,44 @@ def backup_database(path):
     return str(target)
 
 
+def _has_column(connection, table, column):
+    return any(row[1] == column for row in connection.execute(f'PRAGMA table_info({table})'))
+
+
+def _migrate_v4(connection):
+    if not _has_column(connection, 'claims', 'tx_candidate_basis'):
+        connection.execute("ALTER TABLE claims ADD COLUMN tx_candidate_basis TEXT CHECK(tx_candidate_basis IN ('corroborated','operator_relay') OR tx_candidate_basis IS NULL)")
+    if not _has_column(connection, 'workflow_audit', 'tx_candidate_basis'):
+        connection.execute("ALTER TABLE workflow_audit ADD COLUMN tx_candidate_basis TEXT CHECK(tx_candidate_basis IN ('corroborated','operator_relay') OR tx_candidate_basis IS NULL)")
+    candidates = connection.execute("SELECT id FROM claims WHERE status='TX_CANDIDATE' AND tx_candidate_basis IS NULL ORDER BY id").fetchall()
+    for row in candidates:
+        claim_id = row[0]
+        corroborated = connection.execute(
+            "SELECT 1 FROM observations WHERE claim_id=? AND source_type IN ('official','media') LIMIT 1",
+            (claim_id,),
+        ).fetchone()
+        if corroborated:
+            basis = 'corroborated'
+        else:
+            legacy_override = any(
+                json.loads(item[0]).get('_trusted_for_relay')
+                for item in connection.execute('SELECT raw_json FROM observations WHERE claim_id=?',(claim_id,))
+            )
+            if not legacy_override:
+                raise ValueError(f'Cannot infer TX_CANDIDATE basis for legacy claim {claim_id}')
+            basis = 'operator_relay'
+        connection.execute('UPDATE claims SET tx_candidate_basis=? WHERE id=?', (basis, claim_id))
+        connection.execute(
+            'INSERT INTO workflow_audit(claim_id,previous_status,new_status,reason,changed_at,tx_candidate_basis) VALUES(?,?,?,?,?,?)',
+            (claim_id,'TX_CANDIDATE','TX_CANDIDATE',MIGRATION_AUDIT_PREFIX+basis,iso(utc_now()),basis),
+        )
+    for row in connection.execute('SELECT id FROM claims ORDER BY id').fetchall():
+        recompute_claim(connection,row[0])
+    connection.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
+
+
 @contextmanager
-def connect(path: str):
+def connect(path: str, *, allow_migrate: bool = False):
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(db_path, timeout=30)
@@ -77,10 +119,10 @@ def connect(path: str):
     try:
         existing = connection.execute("SELECT 1 FROM sqlite_master WHERE name='observations'").fetchone()
         version = connection.execute('PRAGMA user_version').fetchone()[0]
-        if version > 3:
+        if version > SCHEMA_VERSION:
             raise ValueError('Database is newer than this SHADE version')
-        if existing and version < 3 and path != ':memory:':
-            backup_database(path)
+        if existing and version < SCHEMA_VERSION and path != ':memory:' and not allow_migrate:
+            raise ValueError('Database migration required; run `shade migrate` to create a verified backup and upgrade it')
         connection.executescript(SCHEMA)
         connection.executescript("""
         CREATE TABLE IF NOT EXISTS observation_revisions (
@@ -90,7 +132,8 @@ def connect(path: str):
         CREATE TABLE IF NOT EXISTS workflow_audit (
             id INTEGER PRIMARY KEY, claim_id INTEGER NOT NULL REFERENCES claims(id),
             previous_status TEXT NOT NULL, new_status TEXT NOT NULL, reason TEXT NOT NULL,
-            changed_at TEXT NOT NULL);
+            changed_at TEXT NOT NULL,
+            tx_candidate_basis TEXT CHECK(tx_candidate_basis IN ('corroborated','operator_relay') OR tx_candidate_basis IS NULL));
         CREATE TABLE IF NOT EXISTS event_supersessions (
             source_family TEXT NOT NULL, external_id TEXT NOT NULL, superseded_at TEXT NOT NULL,
             PRIMARY KEY(source_family,external_id));
@@ -100,8 +143,11 @@ def connect(path: str):
         CREATE TABLE IF NOT EXISTS source_polls (
             source_id TEXT PRIMARY KEY, last_attempt TEXT NOT NULL, next_allowed TEXT NOT NULL,
             success INTEGER NOT NULL, error TEXT NOT NULL DEFAULT '');
-        PRAGMA user_version=3;
         """)
+        if version < SCHEMA_VERSION:
+            _migrate_v4(connection)
+        connection.execute('UPDATE source_polls SET error=? WHERE error=?',
+                           (UNKNOWN_LEGACY_POLL_ERROR,LEGACY_POLL_ERROR))
         # Idempotently recover references from legacy raw evidence as well.
         for row in connection.execute("SELECT source_family,raw_json FROM observations WHERE category='weather'"):
             record_supersessions(connection,row['source_family'],json.loads(row['raw_json']))
@@ -134,35 +180,16 @@ def _significance(severities, title, category):
 
 
 def recompute_claim(connection: sqlite3.Connection, claim_id: int) -> None:
-    rows = connection.execute(
-        "SELECT source_type, source_family, severity, title FROM observations WHERE claim_id = ?",
-        (claim_id,),
-    ).fetchall()
-    families = {row["source_family"] for row in rows}
-    official = {row["source_family"] for row in rows if row["source_type"] == "official"}
-    community = {row["source_family"] for row in rows if row["source_type"] == "community"}
-    media = {row["source_family"] for row in rows if row["source_type"] == "media"}
-    trusted = any(json.loads(row["raw_json"]).get("_trusted_for_relay") for row in connection.execute("SELECT raw_json FROM observations WHERE claim_id=?", (claim_id,)))
-    corroborating = official | media
-    if official and len(families) >= 2:
-        label, confidence = "CONFIRMED", 90
-    elif corroborating and len(corroborating) >= 2:
-        label, confidence = "CORROBORATED", 60
-    elif official:
-        label, confidence = "OFFICIAL-REPORT", 75
-    elif trusted:
-        label, confidence = "TRUSTED-RELAY", 75
-    elif community:
-        label, confidence = "UNVERIFIED", 20
-    else:
-        label, confidence = "REPORTED", 35
+    rows = evidence_rows(connection,claim_id)
+    label, confidence_score, family_count, official_count, _ = confidence(rows)
     title = rows[0]["title"] if rows else ""
     claim = connection.execute("SELECT category FROM claims WHERE id = ?", (claim_id,)).fetchone()
     significance = _significance([row["severity"] for row in rows], title, claim["category"])
     connection.execute(
         """UPDATE claims SET observation_count=?, independent_families=?, official_families=?,
         confidence_label=?, confidence_score=?, significance_score=? WHERE id=?""",
-        (len(rows), len(families), len(official), label, confidence, significance, claim_id),
+        (connection.execute('SELECT COUNT(*) FROM observations WHERE claim_id=?',(claim_id,)).fetchone()[0],
+         family_count, official_count, label, confidence_score, significance, claim_id),
     )
 
 
@@ -203,6 +230,7 @@ def ingest(connection: sqlite3.Connection, observation: Observation) -> tuple[in
                 connection.execute("UPDATE claims SET status='NEW' WHERE id=?",(existing['claim_id'],))
                 connection.execute('INSERT INTO workflow_audit(claim_id,previous_status,new_status,reason,changed_at) VALUES(?,?,?,?,?)',
                                    (existing['claim_id'],'EXPIRED','NEW','Source supplied a new validity extension',iso(utc_now())))
+            recompute_claim(connection,existing['claim_id'])
         return existing['claim_id'], bool(cursor.rowcount)
     fingerprint = sha256((observation.source_family+'|'+observation.external_id).encode()).hexdigest()
     claim = connection.execute('SELECT id FROM claims WHERE fingerprint=?',(fingerprint,)).fetchone()
@@ -246,20 +274,32 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def transition(connection: sqlite3.Connection, claim_id: int, new_status: str) -> None:
+def transition(connection: sqlite3.Connection, claim_id: int, new_status: str, *, operator_override: bool = False) -> None:
     row = connection.execute("SELECT status FROM claims WHERE id=?", (claim_id,)).fetchone()
     if not row:
         raise ValueError(f"claim {claim_id} not found")
     new_status = new_status.upper()
+    basis = None
     if new_status == "TX_CANDIDATE":
-        evidence = connection.execute("SELECT source_type,raw_json FROM observations WHERE claim_id=?", (claim_id,)).fetchall()
-        if not any(row["source_type"] in {"official", "media"} or json.loads(row["raw_json"]).get("_trusted_for_relay") for row in evidence):
+        evidence = connection.execute("SELECT source_type FROM observations WHERE claim_id=?", (claim_id,)).fetchall()
+        corroborated = any(item["source_type"] in {"official", "media"} for item in evidence)
+        if operator_override:
+            basis = 'operator_relay'
+        elif corroborated:
+            basis = 'corroborated'
+        else:
             raise ValueError("TX_CANDIDATE requires at least one official or media source family")
+    elif operator_override:
+        raise ValueError('Operator relay override applies only to TX_CANDIDATE')
     if new_status not in ALLOWED_TRANSITIONS.get(row["status"], set()):
         raise ValueError(f"invalid transition {row['status']} -> {new_status}")
-    connection.execute("UPDATE claims SET status=? WHERE id=?", (new_status, claim_id))
-    connection.execute('INSERT INTO workflow_audit(claim_id,previous_status,new_status,reason,changed_at) VALUES(?,?,?,?,?)',
-                       (claim_id,row['status'],new_status,'operator',iso(utc_now())))
+    if basis:
+        connection.execute("UPDATE claims SET status=?,tx_candidate_basis=? WHERE id=?", (new_status,basis,claim_id))
+    else:
+        connection.execute("UPDATE claims SET status=? WHERE id=?", (new_status,claim_id))
+    reason = 'operator relay override' if basis == 'operator_relay' else 'operator'
+    connection.execute('INSERT INTO workflow_audit(claim_id,previous_status,new_status,reason,changed_at,tx_candidate_basis) VALUES(?,?,?,?,?,?)',
+                       (claim_id,row['status'],new_status,reason,iso(utc_now()),basis))
 
 
 def evidence_rows(connection, claim_id):

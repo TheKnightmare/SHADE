@@ -11,6 +11,7 @@ shade now
 shade --mode exercise inbox
 shade --mode exercise format 214
 shade --mode actual format 214 --confirm-actual
+shade relay 214
 ```
 
 `--emcomm exercise` and `--emcomm actual` remain compatible aliases. Do not
@@ -29,6 +30,12 @@ Review the source URLs, confidence explanation, dates and area with `show`.
 Uncorroborated community reporting remains UNVERIFIED. A CONFIRMED label describes
 configured independent origins; it is not proof of truth. Sources that relay a
 common report must use the same family.
+
+Normal `mark ID tx_candidate` requires official or media evidence and records a
+`corroborated` basis. `relay ID` is the explicit operator override for a reviewed
+claim without that evidence; it records `operator_relay` in the claim and audit
+log. A high-credibility source label is informational and does not unlock either
+path.
 
 Workflow: NEW -> CORRELATING/REVIEW -> TX_CANDIDATE -> SENT; rejection is available
 where shown by `show`. SENT is only a manual historical annotation. Expired

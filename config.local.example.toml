@@ -146,7 +146,7 @@ source_family = "s2-underground-wire"
 category = "chatter"
 enabled = false
 min_poll_seconds = 1800
-trusted_for_relay = true
+high_credibility = true
 
 [[sources]]
 id = "telegram-s2-underground-project"
@@ -158,7 +158,6 @@ source_family = "s2-underground-project"
 category = "chatter"
 enabled = false
 min_poll_seconds = 1800
-trusted_for_relay = true
 
 [[sources]]
 id = "telegram-disclosetv"

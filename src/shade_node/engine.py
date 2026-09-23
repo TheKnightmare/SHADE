@@ -13,6 +13,7 @@ from .collectors import CollectionError, collect
 from .db import connect, ingest
 from .model import SourceConfig
 from .keywords import load_keywords
+from urllib.parse import urlparse
 
 
 @dataclass(slots=True)
@@ -81,7 +82,14 @@ def load_settings(path: str) -> Settings:
     collection = payload.get("collection", {})
     operation = payload.get("operation", {})
     emcomm = payload.get("emcomm", {})
-    sources = [SourceConfig(**item) for item in payload.get("sources", [])]
+    source_items=[]
+    for configured in payload.get('sources',[]):
+        item=dict(configured)
+        # Safe upgrade path: the former bypass flag becomes display-only.
+        if 'trusted_for_relay' in item:
+            item.setdefault('high_credibility',bool(item.pop('trusted_for_relay')))
+        source_items.append(item)
+    sources = [SourceConfig(**item) for item in source_items]
     for source in sources:
         source.keywords = keywords
     database = str(collection.get("database", "data/shade.db"))
@@ -118,6 +126,16 @@ def active_sources(settings: Settings, mode: str = "standard") -> list[SourceCon
     ]
 
 
+def cooldown_budget(source: SourceConfig) -> str:
+    """Return the persistent upstream budget shared by related sources."""
+    if source.kind == 'telegram_preview':
+        return 'telegram-preview:global'
+    if source.kind == 'mastodon_hashtag':
+        instance = (source.instance or urlparse(source.url).hostname or '').lower()
+        return 'mastodon-instance:' + instance
+    return 'source:' + source.id
+
+
 def run_once(settings: Settings, mode: str | None = None) -> dict:
     mode = normalize_mode(mode or settings.operating_mode)
     result = {
@@ -133,11 +151,24 @@ def run_once(settings: Settings, mode: str | None = None) -> dict:
     selected = active_sources(settings, mode)
     with connect(settings.database) as connection:
         previous={row['source_id']:dict(row) for row in connection.execute('SELECT * FROM source_polls')}
-    enabled=[s for s in selected if not previous.get(s.id) or timestamp(previous[s.id]['next_allowed'])<=utc_now()]
+    now = utc_now()
+    by_budget = {}
+    for source in selected:
+        by_budget.setdefault(cooldown_budget(source), []).append(source)
+    enabled = []
+    for sources in by_budget.values():
+        group_next = [timestamp(previous[s.id]['next_allowed']) for s in sources if previous.get(s.id)]
+        if any(value and value > now for value in group_next):
+            continue
+        due = [s for s in sources if not previous.get(s.id) or timestamp(previous[s.id]['next_allowed']) <= now]
+        if due:
+            # Shared budgets poll one source per run, oldest first, so large
+            # Telegram and per-instance Mastodon sets advance fairly.
+            enabled.append(min(due, key=lambda s: previous.get(s.id, {}).get('last_attempt', '')))
     result['sources_skipped_cooldown']=len(selected)-len(enabled)
     result["sources_selected"] = len(enabled)
     collected: dict[str, tuple[SourceConfig, list]] = {}
-    backoff = {}
+    failures = {}
     workers = max(1, min(8, len(enabled)))
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="shade") as pool:
         futures = {
@@ -156,14 +187,15 @@ def run_once(settings: Settings, mode: str | None = None) -> dict:
                 collected[source.id] = (source, future.result())
                 result["sources_ok"] += 1
             except (CollectionError, ValueError, TypeError, KeyError) as exc:
-                backoff[source.id]=getattr(exc,"retry_after",0)
+                failures[source.id]=(str(exc),getattr(exc,"retry_after",0))
                 result["sources_failed"] += 1
                 result["errors"].append(f"{source.id}: {exc}")
     with connect(settings.database) as connection:
         for source in enabled:
             ok=source.id in collected
+            error,retry_after=failures.get(source.id,('',0))
             connection.execute('INSERT OR REPLACE INTO source_polls(source_id,last_attempt,next_allowed,success,error) VALUES(?,?,?,?,?)',
-                               (source.id,iso(utc_now()),iso(utc_now()+timedelta(seconds=source.min_poll_seconds if ok else max(1800,source.min_poll_seconds,backoff.get(source.id,0)))),int(ok),'' if ok else 'Collection failed; see run output'))
+                               (source.id,iso(utc_now()),iso(utc_now()+timedelta(seconds=source.min_poll_seconds if ok else max(1800,source.min_poll_seconds,retry_after))),int(ok),error))
         for configured_source in enabled:
             batch = collected.get(configured_source.id)
             if batch is None:
@@ -175,8 +207,8 @@ def run_once(settings: Settings, mode: str | None = None) -> dict:
                     connection.execute('INSERT OR REPLACE INTO source_presence(source_id,external_id,asof,active) VALUES(?,?,?,1)',
                                        (item.source_id,item.external_id,iso(utc_now())))
             for observation in observations:
-                if configured_source.trusted_for_relay:
-                    observation.raw['_trusted_for_relay'] = True
+                if configured_source.high_credibility:
+                    observation.raw['_high_credibility_source'] = True
                 try:
                     published = datetime.fromisoformat(observation.published_at.replace("Z", "+00:00"))
                 except ValueError:

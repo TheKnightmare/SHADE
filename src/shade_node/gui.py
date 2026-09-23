@@ -11,7 +11,7 @@ import webbrowser
 from . import __version__
 from .desktop import DesktopService
 from .db import ALLOWED_TRANSITIONS
-from .formatters import evidence_summary
+from .formatters import evidence_summary, workflow_status
 from .relevance import age, remaining
 
 BG = '#101923'
@@ -143,7 +143,7 @@ class ShadeWindow:
         splitter.add(listing, weight=3)
         columns = ('id','age','area','category','score','confidence','families','status','remaining','title')
         self.tree = ttk.Treeview(listing, columns=columns, show='headings', selectmode='browse', height=10)
-        for key, label, width in zip(columns, ['ID','Age','Area','Type','Sig','Conf','Src','State','Validity','Report'], [48,48,90,125,42,48,38,98,90,420]):
+        for key, label, width in zip(columns, ['ID','Age','Area','Type','Sig','Confidence','Src','State','Validity','Report'], [48,48,90,125,42,210,38,210,90,420]):
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, minwidth=35, stretch=key=='title')
         ys = ttk.Scrollbar(listing, orient='vertical', command=self.tree.yview)
@@ -260,7 +260,7 @@ class ShadeWindow:
         self.claim = None
         self.observations = []
         for row in rows:
-            self.tree.insert('', 'end', iid=str(row['id']), values=(row['id'],age(row['published']),row['area'],row['category'].upper(),row['score'],row['confidence_score'],row['independent_families'],row['status'],remaining(row['expires']) if row['expires'] else '—',row['title']))
+            self.tree.insert('', 'end', iid=str(row['id']), values=(row['id'],age(row['published']),row['area'],row['category'].upper(),row['score'],row['confidence_label'],row['independent_families'],workflow_status(row),remaining(row['expires']) if row['expires'] else '—',row['title']))
         self.count.set(f'{len(rows)} reports')
         self._set_text(self.details, 'Select a report above.' if rows else 'No reports match this view.\nTry NOW for local life-safety weather, or All evidence + Include suppressed for retained reports.\nExpired reports require selecting EXPIRED in the state filter.')
         self._enabled()
@@ -290,7 +290,7 @@ class ShadeWindow:
             return
         self._set_text(self.details, '\n'.join(line for line in evidence_summary(self.claim,self.observations).splitlines() if not line.startswith(('NEXT:', 'FORMAT:'))))
         self._enabled()
-        self.status.set(f"Report {self.claim['id']} • {self.claim['confidence_label']} • {self.claim['status']}")
+        self.status.set(f"Report {self.claim['id']} • {self.claim['confidence_label']} • {workflow_status(self.claim)}")
 
     def change_mode(self, event=None):
         chosen = self.mode.get()

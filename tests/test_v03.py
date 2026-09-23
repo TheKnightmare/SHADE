@@ -145,14 +145,29 @@ class AcceptanceTests(unittest.TestCase):
             a,_=ingest(db,quake());transition(db,a,'REVIEW')
             self.assertEqual(housekeeping(db,now=NOW,apply=True,suppress=True),[])
 
-    def test_schema_backup_idempotence_preserves_evidence(self):
+    def test_schema_migration_requires_cli_backup_and_preserves_evidence(self):
         with tempfile.TemporaryDirectory() as folder:
-            path=str(Path(folder)/'old.db')
-            with connect(path) as db: ingest(db,obs());db.execute('PRAGMA user_version=0')
+            root=Path(folder);path=str(root/'old.db')
             with connect(path) as db:
+                claim_id,_=ingest(db,obs(source_type='community',source_family='relay'))
+                db.execute("UPDATE claims SET status='TX_CANDIDATE',tx_candidate_basis=NULL WHERE id=?",(claim_id,))
+                db.execute("UPDATE observations SET raw_json=? WHERE claim_id=?",(json.dumps({'_trusted_for_relay':True}),claim_id))
+                db.execute("INSERT INTO source_polls VALUES('legacy','2026-01-01T00:00:00Z','2026-01-01T01:00:00Z',0,'Collection failed; see run output')")
                 before=[tuple(r) for r in db.execute('SELECT * FROM observations')]
-                self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],3)
-            with connect(path) as db:self.assertEqual(before,[tuple(r) for r in db.execute('SELECT * FROM observations')])
+                db.execute('PRAGMA user_version=3')
+            with self.assertRaisesRegex(ValueError,'shade migrate'):
+                with connect(path): pass
+            config=root/'config.toml';config.write_text('[operator]\ncallsign="TEST"\nnetwork="TEST"\nregion_label="TEST"\n[collection]\ndatabase="old.db"\nuser_agent="SHADE-Test test@example.test"\n')
+            output=io.StringIO()
+            with redirect_stdout(output): self.assertEqual(main(['--config',str(config),'migrate']),0)
+            self.assertIn('tx_candidate_basis_backfills',output.getvalue())
+            with connect(path) as db:
+                self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],4)
+                self.assertEqual(db.execute('SELECT tx_candidate_basis FROM claims WHERE id=?',(claim_id,)).fetchone()[0],'operator_relay')
+                audit=db.execute("SELECT reason FROM workflow_audit WHERE claim_id=? AND reason LIKE 'migration v4:%'",(claim_id,)).fetchone()[0]
+                self.assertIn('operator_relay',audit)
+                self.assertIn('next poll',db.execute("SELECT error FROM source_polls WHERE source_id='legacy'").fetchone()[0])
+                self.assertEqual(before,[tuple(r) for r in db.execute('SELECT * FROM observations')])
             backups=list(Path(folder).glob('*.bak'));self.assertEqual(len(backups),1)
             with closing(sqlite3.connect(backups[0])) as db:self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
 
@@ -278,20 +293,72 @@ class AcceptanceTests(unittest.TestCase):
         archived = parse_ipaws_archive(arc, json.dumps({'IpawsArchivedAlerts':[{'identifier':'x','info_headline':'Test','sent':'2026-09-22T00:00:00Z'}]}).encode())
         self.assertTrue(archived[0].raw['_lagging_archive'])
 
-    def test_trusted_relay_can_advance_without_being_official(self):
-        trusted=obs(source_type='community',source_family='s2-underground-wire',category='chatter',
-                    title='Major outage reported near Knoxville',raw={'_area':'Knoxville','_trusted_for_relay':True})
+    def test_high_credibility_is_informational_and_operator_relay_is_explicit(self):
+        trusted=obs(source_type='community',source_family='any-community-source',category='chatter',
+                    title='Major outage reported near Knoxville',raw={'_area':'Knoxville','_high_credibility_source':True})
         with connect(':memory:') as db:
             claim_id,_=ingest(db,trusted)
             row,_=claim_detail(db,claim_id,now=NOW)
-            self.assertEqual(row['confidence_label'],'TRUSTED-RELAY')
-            transition(db,claim_id,'REVIEW'); transition(db,claim_id,'TX_CANDIDATE')
+            self.assertEqual(row['confidence_label'],'UNVERIFIED (HIGH-CRED SOURCE)')
+            transition(db,claim_id,'REVIEW')
+            with self.assertRaises(ValueError): transition(db,claim_id,'TX_CANDIDATE')
+            transition(db,claim_id,'TX_CANDIDATE',operator_override=True)
+            row,_=claim_detail(db,claim_id,now=NOW)
+            self.assertEqual(row['tx_candidate_basis'],'operator_relay')
+            self.assertEqual(row['confidence_label'],'UNVERIFIED (HIGH-CRED SOURCE)')
+            audit=db.execute('SELECT reason,tx_candidate_basis FROM workflow_audit ORDER BY id DESC').fetchone()
+            self.assertEqual(tuple(audit),('operator relay override','operator_relay'))
+
+    def test_cli_relay_override_end_to_end(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);config=root/'config.toml';database=root/'test.db'
+            config.write_text('[operator]\ncallsign="TEST"\nnetwork="TEST"\nregion_label="TEST"\n[collection]\ndatabase="test.db"\nuser_agent="SHADE-Test test@example.test"\n')
+            with connect(str(database)) as db:
+                claim_id,_=ingest(db,obs(source_type='community',source_family='community'))
+                transition(db,claim_id,'REVIEW')
+            output=io.StringIO()
+            with redirect_stdout(output): self.assertEqual(main(['--config',str(config),'relay',str(claim_id)]),0)
+            self.assertIn('operator relay',output.getvalue())
+            with connect(str(database)) as db:
+                claim,_=claim_detail(db,claim_id,now=NOW)
+                self.assertEqual((claim['status'],claim['tx_candidate_basis']),('TX_CANDIDATE','operator_relay'))
+            output=io.StringIO()
+            with redirect_stdout(output): self.assertEqual(main(['--config',str(config),'inbox','--status','TX_CANDIDATE','--lane','all','--all']),0)
+            self.assertIn('TX_CANDIDATE (operator relay)',output.getvalue())
+
+    def test_ordinary_community_and_media_confidence_are_canonical(self):
+        with connect(':memory:') as db:
+            ordinary,_=ingest(db,obs(source_type='community',source_family='ordinary'))
+            row,_=claim_detail(db,ordinary,now=NOW)
+            self.assertEqual(row['confidence_label'],'UNVERIFIED')
+            ingest(db,obs(source_type='community',source_family='ordinary',raw={'_high_credibility_source':True}))
+            persisted=db.execute('SELECT confidence_label FROM claims WHERE id=?',(ordinary,)).fetchone()[0]
+            row,_=claim_detail(db,ordinary,now=NOW)
+            self.assertEqual(persisted,row['confidence_label'])
+            self.assertEqual(persisted,'UNVERIFIED (HIGH-CRED SOURCE)')
+            media,_=ingest(db,obs(source_id='media',external_id='media',source_type='media',source_family='news',
+                                  title='Major outage reported near Knoxville terminal'))
+            ingest(db,obs(source_id='community',external_id='community',source_type='community',source_family='witness',
+                          title='Major outage reported near Knoxville terminal'))
+            persisted=db.execute('SELECT confidence_label FROM claims WHERE id=?',(media,)).fetchone()[0]
+            queried,_=claim_detail(db,media,now=NOW)
+            self.assertEqual(persisted,'CORROBORATED')
+            self.assertEqual(queried['confidence_label'],persisted)
 
     def test_bulletin_split_and_numbering(self):
         parts=split_message('Sentence one. Sentence two with enough words to split cleanly.', 24)
         self.assertTrue(all(len(part)<=24 for part in parts)); self.assertEqual(''.join(parts).replace(' ',''), 'Sentenceone.Sentencetwowithenoughwordstosplitcleanly.')
         claim=dict(self.visible(obs())[0]); claim['confidence_label']='OFFICIAL-REPORT'; claim['status']='REVIEW'
-        self.assertTrue(all('/' in line for line in bulletin_messages([(claim,[dict(source_family='agency',source_type='official')])],callsign='T',network='N',max_chars=120)))
+        official=dict(source_family='agency',source_type='official',raw_json='{}')
+        messages=bulletin_messages([(claim,[official])],callsign='T',network='N',max_chars=120)
+        self.assertTrue(all('/' in line for line in messages));self.assertIn('(C)',messages[1])
+        claim['status']='TX_CANDIDATE';claim['tx_candidate_basis']='operator_relay'
+        community=dict(source_family='community',source_type='community',raw_json='{}')
+        self.assertIn('(O)',bulletin_messages([(claim,[community])],callsign='T',network='N',max_chars=120)[1])
+        claim['status']='REVIEW';claim['tx_candidate_basis']=None
+        self.assertIn('(U)',bulletin_messages([(claim,[community])],callsign='T',network='N',max_chars=120)[1])
+        high=dict(source_family='community',source_type='community',raw_json='{"_high_credibility_source":true}')
+        self.assertIn('(U-HC)',bulletin_messages([(claim,[high])],callsign='T',network='N',max_chars=120)[1])
 
     def test_format_length_and_exercise_markers(self):
         with connect(':memory:') as db:
@@ -359,6 +426,57 @@ class AcceptanceTests(unittest.TestCase):
                 second=run_once(settings);self.assertEqual(second['sources_skipped_cooldown'],1)
                 with connect(settings.database) as db:db.execute("UPDATE source_polls SET next_allowed='2000-01-01T00:00:00Z'")
                 third=run_once(settings);self.assertEqual(third['inserted'],0);self.assertEqual(collect.call_count,2)
+
+    def test_shared_telegram_and_per_instance_mastodon_budgets(self):
+        from shade_node.engine import Settings
+        from shade_node.model import SourceConfig
+        sources=[
+            SourceConfig('tg-a','telegram_preview','A','https://t.me/s/a','community','a',min_poll_seconds=60),
+            SourceConfig('tg-b','telegram_preview','B','https://t.me/s/b','community','b',min_poll_seconds=60),
+            SourceConfig('m-a','mastodon_hashtag','M1','https://mastodon.social/api/v1/timelines/tag/a','community','ma',instance='mastodon.social',hashtag='a',min_poll_seconds=60),
+            SourceConfig('m-b','mastodon_hashtag','M2','https://mastodon.social/api/v1/timelines/tag/b','community','mb',instance='mastodon.social',hashtag='b',min_poll_seconds=60),
+            SourceConfig('m-other','mastodon_hashtag','M3','https://infosec.exchange/api/v1/timelines/tag/a','community','mc',instance='infosec.exchange',hashtag='a',min_poll_seconds=60),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            settings=Settings(str(Path(folder)/'test.db'),7,10,1000,'test','TEST','TEST','TEST',500,'standard',35,10,'TEST','TEST',500,sources)
+            with patch('shade_node.engine.collect',return_value=[]) as collect:
+                result=run_once(settings)
+                self.assertEqual(result['sources_selected'],3)
+                selected={call.args[0].id for call in collect.call_args_list}
+                self.assertEqual(len(selected & {'tg-a','tg-b'}),1)
+                self.assertEqual(len(selected & {'m-a','m-b'}),1)
+                self.assertIn('m-other',selected)
+
+    def test_source_poll_records_real_failure(self):
+        from shade_node.collectors import CollectionError
+        from shade_node.engine import Settings
+        from shade_node.model import SourceConfig
+        with tempfile.TemporaryDirectory() as folder:
+            settings=Settings(str(Path(folder)/'test.db'),7,10,1000,'test','TEST','TEST','TEST',500,'standard',35,10,'TEST','TEST',500,
+                              [SourceConfig('broken','rss','Broken','https://example.test','official','agency')])
+            with patch('shade_node.engine.collect',side_effect=CollectionError('HTTP 429',retry_after=3600)):
+                run_once(settings)
+            with connect(settings.database) as db:
+                self.assertEqual(db.execute("SELECT error FROM source_polls WHERE source_id='broken'").fetchone()[0],'HTTP 429')
+            config=Path(folder)/'config.toml'
+            config.write_text('[operator]\ncallsign="TEST"\nnetwork="TEST"\nregion_label="TEST"\n[collection]\ndatabase="test.db"\nuser_agent="SHADE-Test test@example.test"\n[[sources]]\nid="broken"\nkind="rss"\nname="Broken"\nurl="https://example.test"\nsource_type="official"\nsource_family="agency"\n')
+            output=io.StringIO()
+            with redirect_stdout(output): self.assertEqual(main(['--config',str(config),'doctor']),1)
+            self.assertIn('Source failure: broken: HTTP 429',output.getvalue())
+
+    def test_high_credibility_config_is_stamped_without_promotion(self):
+        from shade_node.engine import Settings
+        from shade_node.model import SourceConfig
+        with tempfile.TemporaryDirectory() as folder:
+            source=SourceConfig('high','rss','High','https://example.test','community','high',high_credibility=True)
+            settings=Settings(str(Path(folder)/'test.db'),7,10,1000,'test','TEST','TEST','TEST',500,'standard',35,10,'TEST','TEST',500,[source])
+            item=obs(source_id='high',source_type='community',source_family='high',published_at=datetime.now(timezone.utc).isoformat())
+            with patch('shade_node.engine.collect',return_value=[item]): run_once(settings)
+            with connect(settings.database) as db:
+                claim,_=claim_detail(db,1)
+                self.assertEqual(claim['confidence_label'],'UNVERIFIED (HIGH-CRED SOURCE)')
+                transition(db,1,'REVIEW')
+                with self.assertRaises(ValueError): transition(db,1,'TX_CANDIDATE')
 
     def test_actual_and_exercise_cli_formatting_gates(self):
         with tempfile.TemporaryDirectory() as folder:

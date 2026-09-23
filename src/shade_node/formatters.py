@@ -12,6 +12,25 @@ def compact(text: str) -> str:
     return text
 
 
+def workflow_status(claim) -> str:
+    status = claim['status']
+    if status == 'TX_CANDIDATE':
+        basis = (claim.get('tx_candidate_basis') if isinstance(claim, dict) else claim['tx_candidate_basis']) or 'basis missing'
+        return f"TX_CANDIDATE ({basis.replace('_', ' ')})"
+    return status
+
+
+def bulletin_basis_tag(claim, observations) -> str:
+    if claim['status'] == 'TX_CANDIDATE' and claim.get('tx_candidate_basis') == 'operator_relay':
+        return '(O)'
+    if any(row['source_type'] in {'official','media'} for row in observations):
+        return '(C)'
+    if any(json.loads(row['raw_json']).get('_high_credibility_source') or
+           json.loads(row['raw_json']).get('_trusted_for_relay') for row in observations):
+        return '(U-HC)'
+    return '(U)'
+
+
 def traffic_message(
     claim,
     observations,
@@ -74,8 +93,9 @@ def bulletin_messages(items, *, callsign, network, max_chars=500, mode='standard
     header = f"@{network} BULLETIN {callsign} GENERATED:{stamp} ITEMS:{len(items)}"
     bodies = []
     for claim, observations in items:
-        bodies.extend(split_message(traffic_message(claim, observations, callsign=callsign,
-            network=network, max_chars=max_chars, mode=mode, region_label=region_label), max_chars))
+        tagged = bulletin_basis_tag(claim, observations)+' '+traffic_message(claim, observations, callsign=callsign,
+            network=network, max_chars=max_chars, mode=mode, region_label=region_label)
+        bodies.extend(split_message(tagged, max_chars))
     total = 1 + len(bodies)
     # Re-split once using the final numbering overhead so every transmitted
     # line, including the header, remains within the operator limit.
@@ -90,7 +110,7 @@ def bulletin_messages(items, *, callsign, network, max_chars=500, mode='standard
 
 def evidence_summary(claim, observations):
     from .db import ALLOWED_TRANSITIONS
-    lines=[f"CLAIM {claim['id']} | {claim['confidence_label']} | {claim['status']}",claim['title'],
+    lines=[f"CLAIM {claim['id']} | {claim['confidence_label']} | {workflow_status(claim)}",claim['title'],
            'LOCATION: '+(claim['location'] or 'not stated'),
            f"AREA: {claim['area']} | CATEGORY: {claim['category']}",
            f"PUBLISHED: {claim['published']} | FIRST SEEN: {claim['first_seen']} | LAST SEEN: {claim['last_seen']}",
@@ -103,5 +123,7 @@ def evidence_summary(claim, observations):
         lines.append(f"- [{row['source_type']}/{row['source_family']}] {row['source_name']}: {row['url']} (published {row['published_at']}; observed {row['observed_at']})")
     targets=ALLOWED_TRANSITIONS.get(claim['status'],set())
     lines.append('NEXT: '+('; '.join(f"shade mark {claim['id']} {t.lower()}" for t in sorted(targets)) or 'terminal state; evidence retained'))
+    if claim['status']=='REVIEW' and not any(row['source_type'] in {'official','media'} for row in observations):
+        lines.append(f"RELAY OVERRIDE: shade relay {claim['id']} (explicit operator action; logged as operator_relay)")
     if claim['status'] in {'REVIEW','TX_CANDIDATE'}: lines.append(f"FORMAT: shade format {claim['id']} (ACTUAL also requires --confirm-actual)")
     return '\n'.join(lines)

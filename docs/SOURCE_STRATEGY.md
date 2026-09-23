@@ -213,3 +213,13 @@ its event date, location, actors, notes, and fatality fields can independently
 clear a community unrest claim. Multiple community families alone do not clear
 corroboration because unrest channels commonly mirror the same originating
 claim.
+
+`high_credibility = true` is an operator-facing source designation, initially
+used for S2 Underground Wire. It changes the display to `UNVERIFIED (HIGH-CRED
+SOURCE)` but never promotes a claim. Normal advancement to `TX_CANDIDATE`
+requires official or media evidence and is labeled `corroborated`. For an
+exception the operator must review the evidence and explicitly run
+`shade relay <id>`; SHADE labels the result `operator relay` and records that
+basis in the workflow audit log. Bulletin items use `(C)` for official/media
+support, `(O)` for operator relay, `(U-HC)` for an unconfirmed high-credibility
+source, and `(U)` for other unconfirmed REVIEW material.

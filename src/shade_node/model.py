@@ -92,7 +92,7 @@ class SourceConfig:
     min_poll_seconds: int = 900
     api_key_env: str = ""
     max_posts_per_poll: int = 100
-    trusted_for_relay: bool = False
+    high_credibility: bool = False
     sites: list[str] = field(default_factory=list)
     parameters: list[str] = field(default_factory=lambda: ['00060', '00065'])
     threshold: float | None = None

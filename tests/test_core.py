@@ -73,6 +73,7 @@ class ShadeTests(unittest.TestCase):
                     transition(db, claim_id, "SENT")
                 transition(db, claim_id, "REVIEW")
                 transition(db, claim_id, "TX_CANDIDATE")
+                self.assertEqual(db.execute('SELECT tx_candidate_basis FROM claims WHERE id=?',(claim_id,)).fetchone()[0],'corroborated')
                 transition(db, claim_id, "SENT")
 
     def test_exercise_traffic_is_marked_at_both_ends(self):
