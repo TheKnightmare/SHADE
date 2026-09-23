@@ -35,17 +35,6 @@ enabled = false
 min_poll_seconds = 3600
 
 [[sources]]
-id = "telegram-osintdefender"
-kind = "telegram_preview"
-name = "OSINTdefender Telegram preview"
-url = "https://t.me/s/OSINTdefender"
-source_type = "community"
-source_family = "telegram-OSINTdefender"
-category = "chatter"
-enabled = false
-min_poll_seconds = 3600
-
-[[sources]]
 id = "telegram-s2-underground-wire"
 kind = "telegram_preview"
 name = "S2 Underground Wire"
@@ -68,6 +57,61 @@ category = "chatter"
 enabled = false
 min_poll_seconds = 1800
 trusted_for_relay = true
+
+[[sources]]
+id = "telegram-disclosetv"
+kind = "telegram_preview"
+name = "Disclose.tv Telegram"
+url = "https://t.me/s/disclosetv"
+source_type = "community"
+source_family = "telegram-disclosetv"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
+
+[[sources]]
+id = "telegram-cig"
+kind = "telegram_preview"
+name = "CIG Telegram"
+url = "https://t.me/s/cig_telegram"
+source_type = "community"
+source_family = "telegram-cig"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
+
+[[sources]]
+id = "telegram-osintlive"
+kind = "telegram_preview"
+name = "OSINT Live Telegram"
+url = "https://t.me/s/osintlive"
+source_type = "community"
+source_family = "telegram-osintlive"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
+
+[[sources]]
+id = "telegram-russian-osint"
+kind = "telegram_preview"
+name = "Russian OSINT Telegram"
+url = "https://t.me/s/russian_osint"
+source_type = "community"
+source_family = "telegram-russian-osint"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
+
+[[sources]]
+id = "telegram-osintdefender"
+kind = "telegram_preview"
+name = "OSINTdefender Telegram"
+url = "https://t.me/s/osintdefender"
+source_type = "community"
+source_family = "telegram-osintdefender"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
 
 [[sources]]
 id = "s2-ghostmaps"

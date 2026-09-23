@@ -109,3 +109,11 @@ with `trusted_for_relay = true`. SHADE preserves that source's family and text
 attribution and labels the claim `TRUSTED-RELAY`; it does not relabel the source
 as official or silently merge it with another family.
 The full S2 watcher map is documented in [S2_WATCHER.md](S2_WATCHER.md).
+
+## IRC
+
+SHADE does not currently poll IRC. IRC is a persistent, server/channel
+transport rather than an HTTPS feed, so a safe read-only collector would need
+the exact network, TLS server/port, channel names, nick/registration policy,
+and an explicit retention/rate-limit decision. No IRC credentials or chat
+transcripts are collected implicitly.
