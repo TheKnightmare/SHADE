@@ -90,6 +90,8 @@ class SourceConfig:
     pack: str = 'custom'
     area: str = ''
     min_poll_seconds: int = 900
+    api_key_env: str = ""
+    max_posts_per_poll: int = 100
 
     def __post_init__(self):
         from urllib.parse import urlsplit

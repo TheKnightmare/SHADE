@@ -6,6 +6,8 @@ import json
 import re
 import urllib.error
 import urllib.request
+import os
+from html import unescape
 import xml.etree.ElementTree as ET
 
 from .model import Observation, SourceConfig, iso_utc
@@ -19,12 +21,12 @@ class CollectionError(RuntimeError):
         self.retry_after=retry_after
 
 
-def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int) -> bytes:
+def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int, headers: dict | None = None) -> bytes:
     if not url.lower().startswith("https://"):
         raise CollectionError(f"refusing non-HTTPS source: {url}")
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": user_agent, "Accept": "application/json, application/geo+json, application/rss+xml, application/xml, text/xml;q=0.9"},
+        headers={"User-Agent": user_agent, "Accept": "application/json, application/geo+json, application/rss+xml, application/xml, text/xml;q=0.9", **(headers or {})},
     )
     class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -295,6 +297,52 @@ def parse_tdot(source, data):
     return result
 
 
+def parse_telegram_preview(source, data):
+    """Parse Telegram's public HTML preview without fetching media."""
+    html = data.decode('utf-8', 'replace')
+    blocks = re.findall(r'<div class="tgme_widget_message_wrap".*?</div>\s*</div>', html, re.S)
+    result = []
+    for block in blocks[:source.max_posts_per_poll]:
+        mid = re.search(r'data-post="([^"]+)"', block)
+        if not mid:
+            continue
+        post = mid.group(1)
+        text_match = re.search(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', block, re.S)
+        text = unescape(re.sub(r'<br\s*/?>', '\n', text_match.group(1) if text_match else ''))
+        text = re.sub(r'<[^>]+>', '', text).strip()
+        date = re.search(r'<time[^>]+datetime="([^"]+)"', block)
+        forwarded = re.search(r'tgme_widget_message_forwarded_from_name[^>]*>(.*?)</', block, re.S)
+        views = re.search(r'tgme_widget_message_views[^>]*>(.*?)</', block, re.S)
+        link = f"https://t.me/{post}"
+        result.append(Observation(source.id, source.name, source.source_type, source.source_family,
+            post, text[:240] or 'Telegram update', text, link, category=source.category,
+            location=source.area, published_at=iso_utc(date.group(1)) if date else '',
+            raw={'message_id': post.rsplit('/', 1)[-1], 'telegram_permalink': link,
+                 'forwarded_from': unescape(re.sub(r'<[^>]+>', '', forwarded.group(1))).strip() if forwarded else '',
+                 'view_count': unescape(re.sub(r'<[^>]+>', '', views.group(1))).strip() if views else '', '_area': source.area}))
+    return result
+
+
+def parse_acled(source, data):
+    payload = _json(data)
+    rows = payload.get('data') if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise CollectionError('Invalid ACLED API schema')
+    result = []
+    for item in rows:
+        event_id = str(item.get('data_id') or item.get('event_id') or item.get('id') or sha256(json.dumps(item, sort_keys=True).encode()).hexdigest())
+        location = ', '.join(x for x in (item.get('admin1'), item.get('admin2'), item.get('country')) if x)
+        event = item.get('event_type') or item.get('sub_event_type') or 'ACLED event'
+        notes = item.get('notes') or item.get('source_scale') or ''
+        result.append(Observation(source.id, source.name, 'official', source.source_family, event_id,
+            f"{event}: {item.get('location') or item.get('admin2') or 'unlocated'}",
+            f"Actors: {item.get('actor1','')} / {item.get('actor2','')}. {notes}", source.url,
+            category='civil-unrest', location=location, severity='severe' if (item.get('fatalities') or 0) else 'moderate',
+            published_at=iso_utc(item.get('event_date') or item.get('timestamp')),
+            raw={**item, '_area': source.area or 'NATIONAL', 'fatalities': item.get('fatalities', 0)}))
+    return result
+
+
 PARSERS = {
     "nws_alerts": parse_nws,
     "usgs_geojson": parse_usgs,
@@ -305,6 +353,8 @@ PARSERS = {
     "faa_status": parse_faa,
     "status_api": parse_status,
     "tdot_events": parse_tdot,
+    "telegram_preview": parse_telegram_preview,
+    "acled_api": parse_acled,
 }
 
 
@@ -312,7 +362,13 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
     parser = PARSERS.get(source.kind)
     if not parser:
         raise CollectionError(f"unknown collector kind: {source.kind}")
-    data=fetch_bytes(source.url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes)
+    headers = {}
+    if source.api_key_env:
+        key = os.environ.get(source.api_key_env, '')
+        if not key:
+            raise CollectionError(f"missing credential environment variable: {source.api_key_env}")
+        headers['Authorization'] = f'Bearer {key}'
+    data=fetch_bytes(source.url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes,headers=headers)
     try:
         return parser(source,data)
     except (ValueError,TypeError,KeyError,AttributeError,OverflowError) as exc:

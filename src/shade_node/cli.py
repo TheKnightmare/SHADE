@@ -13,7 +13,8 @@ import sqlite3
 from contextlib import closing
 from . import __version__
 from .engine import active_sources, load_settings, normalize_mode, run_once
-from .formatters import evidence_summary, traffic_message
+from .formatters import evidence_summary, traffic_message, bulletin_messages
+from datetime import datetime, timezone, timedelta
 
 
 def parser() -> argparse.ArgumentParser:
@@ -57,6 +58,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="required to format traffic while ACTUAL EmComm mode is active",
     )
+    bulletin_parser = sub.add_parser("bulletin", help="Export reviewed queue as a numbered JS8 text train")
+    bulletin_parser.add_argument("--window", default="24h", help="lookback duration, e.g. 6h or 2d")
+    bulletin_parser.add_argument("--min-score", type=int, default=0)
+    bulletin_parser.add_argument("--category", help="comma-separated categories")
+    bulletin_parser.add_argument("--output", help="output text path (default: data/exports/bulletin-UTC.txt)")
     mark_parser = sub.add_parser("mark", help="Move a claim through the review workflow")
     mark_parser.add_argument("claim_id", type=int)
     mark_parser.add_argument("status", choices=["correlating", "review", "tx_candidate", "sent", "rejected"])
@@ -109,6 +115,8 @@ def _main(argv: list[str] | None = None) -> int:
         try:
             with closing(sqlite3.connect(Path(settings.database).resolve().as_uri()+'?mode=ro',uri=True)) as connection:
                 if connection.execute('PRAGMA quick_check').fetchone()[0]!='ok': issues.append('Database integrity problem')
+                for row in connection.execute("SELECT source_id,error FROM source_polls WHERE success=0 AND error<>''"):
+                    issues.append(f"Source failure: {row[0]}")
         except (OSError,sqlite3.Error): issues.append('Database inaccessible')
         print('MODE: '+mode.upper()+' | TRANSMISSION: human only')
         print('SOURCES: '+str(len(active_sources(settings,mode))))
@@ -136,6 +144,29 @@ def _main(argv: list[str] | None = None) -> int:
                 ttl=(remaining(row['expires'])+' ').ljust(13) if args.command=='now' else ''
                 print(f"{row['id']:<4} {age(row['published']):<4} {row['area']:<10} {row['category'].upper():<16} {row['score']:<3} {row['confidence_score']:<4} {row['independent_families']:<3} {row['status']:<12} {ttl}{row['title'][:85]}")
             if not rows: print('No matching active reports. Use --all for suppressed evidence or shade now for current weather.')
+        elif args.command == "bulletin":
+            match = __import__('re').fullmatch(r'(\d+(?:\.\d+)?)([mhd])', args.window.strip().lower())
+            if not match: raise ValueError('window must look like 30m, 6h, or 2d')
+            amount = float(match.group(1)) * {'m': 60, 'h': 3600, 'd': 86400}[match.group(2)]
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=amount)
+            categories = {x.strip() for x in args.category.split(',')} if args.category else None
+            selected = []
+            seen = set()
+            for status in ('REVIEW', 'TX_CANDIDATE'):
+                for item in queue(connection, args.min_score, 200, lane='all', policy=settings.policy, status=status):
+                    if item['id'] in seen or (categories and item['category'] not in categories): continue
+                    if not item['published'] or datetime.fromisoformat(item['published'].replace('Z','+00:00')) < cutoff: continue
+                    claim, observations = claim_detail(connection, item['id'], settings.policy)
+                    selected.append((claim, observations)); seen.add(item['id'])
+            selected.sort(key=lambda pair: (pair[0]['score'], pair[0]['published']), reverse=True)
+            network = settings.emcomm_network if mode != 'standard' else settings.network
+            region = settings.emcomm_region_label if mode != 'standard' else settings.region_label
+            limit = settings.emcomm_max_message_chars if mode != 'standard' else settings.max_message_chars
+            lines = bulletin_messages(selected, callsign=settings.callsign, network=network, max_chars=limit, mode=mode, region_label=region)
+            target = Path(args.output) if args.output else Path(settings.database).parent / 'exports' / ('bulletin-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '.txt')
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+            print(f'WROTE {target} ({len(lines)} messages; {len(selected)} items)')
         elif args.command == "show":
             claim, observations = claim_detail(connection, args.claim_id,settings.policy)
             print(evidence_summary(claim, observations))

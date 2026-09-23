@@ -141,12 +141,14 @@ def recompute_claim(connection: sqlite3.Connection, claim_id: int) -> None:
     families = {row["source_family"] for row in rows}
     official = {row["source_family"] for row in rows if row["source_type"] == "official"}
     community = {row["source_family"] for row in rows if row["source_type"] == "community"}
+    media = {row["source_family"] for row in rows if row["source_type"] == "media"}
+    corroborating = official | media
     if official and len(families) >= 2:
         label, confidence = "CONFIRMED", 90
+    elif corroborating and len(corroborating) >= 2:
+        label, confidence = "CORROBORATED", 60
     elif official:
         label, confidence = "OFFICIAL-REPORT", 75
-    elif len(families) >= 2:
-        label, confidence = "CORROBORATED", 60
     elif community:
         label, confidence = "UNVERIFIED", 20
     else:
@@ -246,6 +248,10 @@ def transition(connection: sqlite3.Connection, claim_id: int, new_status: str) -
     if not row:
         raise ValueError(f"claim {claim_id} not found")
     new_status = new_status.upper()
+    if new_status == "TX_CANDIDATE":
+        evidence = connection.execute("SELECT source_type FROM observations WHERE claim_id=?", (claim_id,)).fetchall()
+        if not any(row["source_type"] in {"official", "media"} for row in evidence):
+            raise ValueError("TX_CANDIDATE requires at least one official or media source family")
     if new_status not in ALLOWED_TRANSITIONS.get(row["status"], set()):
         raise ValueError(f"invalid transition {row['status']} -> {new_status}")
     connection.execute("UPDATE claims SET status=? WHERE id=?", (new_status, claim_id))

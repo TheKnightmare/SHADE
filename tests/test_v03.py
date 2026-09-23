@@ -9,13 +9,13 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dataclasses import replace
 from unittest.mock import patch
-from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, fetch_bytes, CollectionError
+from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, fetch_bytes, CollectionError
 from shade_node.db import connect, ingest, queue, claim_detail, housekeeping, transition
 from shade_node.model import Observation
 from shade_node.relevance import age, remaining, evaluate, DEFAULT_POLICY
 from shade_node.cli import main, parser
 from shade_node.engine import load_settings, run_once
-from shade_node.formatters import traffic_message, evidence_summary
+from shade_node.formatters import traffic_message, evidence_summary, split_message, bulletin_messages
 
 NOW=datetime(2026,9,22,3,tzinfo=timezone.utc)
 
@@ -116,7 +116,10 @@ class AcceptanceTests(unittest.TestCase):
             row,_=claim_detail(db,a,now=NOW)
             self.assertEqual(row['confidence_label'],'UNVERIFIED');self.assertEqual(row['independent_families'],1)
             ingest(db,obs(source_id='other',external_id='other1',title='Major communications outage near Knoxville terminal',source_type='community',source_family='independent'))
-            row,_=claim_detail(db,a,now=NOW);self.assertEqual(row['confidence_label'],'CORROBORATED')
+            row,_=claim_detail(db,a,now=NOW);self.assertEqual(row['confidence_label'],'UNVERIFIED')
+            with self.assertRaises(ValueError): transition(db,a,'TX_CANDIDATE')
+            ingest(db,obs(source_id='official',external_id='official1',title='Major communications outage near Knoxville terminal',source_type='official',source_family='agency'))
+            row,_=claim_detail(db,a,now=NOW);self.assertEqual(row['confidence_label'],'CONFIRMED')
 
     def test_revision_preservation_and_repeat_dedup(self):
         with connect(':memory:') as db:
@@ -206,6 +209,22 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_insecure_fetch_refused_without_network(self):
         with self.assertRaises(CollectionError):fetch_bytes('http://example.test',user_agent='test',timeout=1,max_bytes=10)
+
+    def test_telegram_and_acled_fixtures(self):
+        from shade_node.model import SourceConfig
+        tg=SourceConfig('tg','telegram_preview','TG','https://t.me/s/example','community','telegram-example',category='chatter')
+        html=b'<div class="tgme_widget_message_wrap"><div data-post="example/42"><div class="tgme_widget_message_text">FBI breach update<br>details</div><time datetime="2026-09-22T02:00:00+00:00"></time><span class="tgme_widget_message_views">123</span></div></div>'
+        rows=parse_telegram_preview(tg,html)
+        self.assertEqual(rows[0].external_id,'example/42'); self.assertEqual(rows[0].raw['view_count'],'123')
+        ac=SourceConfig('ac','acled_api','ACLED','https://example.test','official','acled',category='civil-unrest')
+        rows=parse_acled(ac,json.dumps({'data':[{'data_id':1,'event_date':'2026-09-22','event_type':'Protests','location':'Knoxville','admin1':'Tennessee','country':'United States','actor1':'Group A','fatalities':0}]}).encode())
+        self.assertEqual(rows[0].category,'civil-unrest'); self.assertEqual(rows[0].source_type,'official')
+
+    def test_bulletin_split_and_numbering(self):
+        parts=split_message('Sentence one. Sentence two with enough words to split cleanly.', 24)
+        self.assertTrue(all(len(part)<=24 for part in parts)); self.assertEqual(''.join(parts).replace(' ',''), 'Sentenceone.Sentencetwowithenoughwordstosplitcleanly.')
+        claim=dict(self.visible(obs())[0]); claim['confidence_label']='OFFICIAL-REPORT'; claim['status']='REVIEW'
+        self.assertTrue(all('/' in line for line in bulletin_messages([(claim,[dict(source_family='agency',source_type='official')])],callsign='T',network='N',max_chars=120)))
 
     def test_format_length_and_exercise_markers(self):
         with connect(':memory:') as db:

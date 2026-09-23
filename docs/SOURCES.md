@@ -74,3 +74,22 @@ and limit 100. HTTP 200/schema verified locally. Its default catalog window is
 30 days; SHADE applies the station's seven-day collection cutoff. It polls hourly
 and shares originating family `usgs` with the significant feed. Identical origin
 event IDs correlate even when they arrive through different USGS feed URLs.
+
+## Telegram and civil-unrest sources
+
+`telegram_preview` reads only the public `t.me/s/<channel>` HTML preview. SHADE
+stores text, message metadata, and outbound links; it never downloads media.
+Telegram channels share a global upstream rate-limit budget, so configure each
+channel at a conservative 30–60 minute interval and disable a channel after
+repeated 403/404/timeout failures rather than retrying indefinitely.
+
+`acled_api` is an official ACLED US Crisis Monitor dataset. Set its API key via
+the configured environment variable (`ACLED_API_KEY` in the example) and never
+place credentials in a TOML file. ACLED observations are normalized as
+`civil-unrest` events with event date, location, actors, notes, and fatalities.
+
+Community corroboration does not become transmit-eligible merely because more
+community families repeat it. Fast-moving unrest channels frequently mirror one
+another, so repeated community claims can be one rumor propagating. A claim
+requires at least one official or media family before it may advance to
+`TX_CANDIDATE`; ACLED counts as official.

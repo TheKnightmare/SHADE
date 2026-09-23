@@ -11,7 +11,7 @@ DEFAULT_POLICY = {
     'local_counties': ['Knox, TN','Blount, TN','Sevier, TN','Anderson, TN','Loudon, TN','Roane, TN','Monroe, TN','McMinn, TN','Bradley, TN','Hamilton, TN','Campbell, TN','Claiborne, TN','Union, TN','Grainger, TN','Jefferson, TN','Hamblen, TN','Cocke, TN','Greene, TN','Washington, TN','Sullivan, TN','Carter, TN','Johnson, TN','Unicoi, TN','Hawkins, TN','Hancock, TN','Scott, TN','Morgan, TN','Cumberland, TN','Bledsoe, TN','Rhea, TN','Meigs, TN','Polk, TN','Sequatchie, TN','Marion, TN','Buncombe, NC','Haywood, NC','Henderson, NC','Madison, NC','Yancey, NC','Mitchell, NC','Avery, NC','Watauga, NC','Ashe, NC','Alleghany, NC','Wilkes, NC','Caldwell, NC','Burke, NC','McDowell, NC','Rutherford, NC','Polk, NC','Transylvania, NC','Jackson, NC','Swain, NC','Macon, NC','Graham, NC','Clay, NC','Cherokee, NC'],
     'category_priorities': {},
 }
-OPERATIONAL = {'cyber','infrastructure','grid','fuel','communications','transportation','supply-chain','public-health','public-safety','emergency','chatter','top-news'}
+OPERATIONAL = {'cyber','infrastructure','grid','fuel','communications','transportation','supply-chain','public-health','public-safety','emergency','chatter','top-news','civil-unrest'}
 LIFE_SAFETY = {'Tornado Warning','Flash Flood Warning','Civil Emergency Message','Evacuation Immediate','Shelter In Place Warning','Extreme Wind Warning','Tsunami Warning'}
 
 
@@ -86,9 +86,10 @@ def geography(row, meta, policy):
 def confidence(rows):
     families={r['source_family'] for r in rows}
     official={r['source_family'] for r in rows if r['source_type']=='official'}
+    media={r['source_family'] for r in rows if r['source_type']=='media'}
     if official and len(families)>=2: label,score='CONFIRMED',90
     elif official: label,score='OFFICIAL-REPORT',75
-    elif len(families)>=2: label,score='CORROBORATED',60
+    elif len(media)>=2 or (media and len(families)>=2): label,score='CORROBORATED',60
     elif any(r['source_type']=='community' for r in rows): label,score='UNVERIFIED',20
     else: label,score='REPORTED',35
     explanation=f'{len(families)} configured originating family/families; {len(official)} official. Reposts in one family count once; this label is attribution, not proof of truth.'
@@ -149,7 +150,7 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
         context_pattern=(r'\b(white house|congress|supreme court|federal government|president|election|government shutdown|'
                          r'tariff|sanction|inflation|interest rate|recession|market crash|bank failure|war|attack|airstrike|'
                          r'ceasefire|invasion|missile|military|nuclear|cyberattack|outage|airport|flight|rail|port|shipping|'
-                         r'supply chain|shortage|outbreak|pandemic|epidemic|recall|hurricane|tornado|flood|wildfire|earthquake)\b')
+                         r'supply chain|shortage|outbreak|pandemic|epidemic|recall|hurricane|tornado|flood|wildfire|earthquake|breach|hacked|hack|ransomware|fbi|federal bureau|data leak)\b')
         fuel_pattern=r'\b(?:gas(?:oline)?|diesel|oil|fuel)\b.{0,50}\b(?:price|cost|rise|surge|spike|increase|shortage|supply)\b|\b(?:price|cost)\b.{0,50}\b(?:gas(?:oline)?|diesel|oil|fuel)\b'
         if not re.search(context_pattern+'|'+fuel_pattern,text,re.I): reason='No clear national operational or civic impact trigger'
         elif hours>36: reason='Top-news context is older than 36 hours'
@@ -159,6 +160,9 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
         # event signal before it enters the operator inbox.
         chatter_pattern=r'\b(outage|disruption|closure|closed|evacuation|shortage|outbreak|emergency declaration|fire|explosion|crash|collision|shooting|stabbing|missing person|hazmat|hazardous materials|boil water|water main|power line|brush fire|wildfire|fatal|deadly|lockdown|shelter in place)\b'
         if not re.search(chatter_pattern,row['title'],re.I): reason='No concrete event signal in the community headline'
+    elif cat == 'civil-unrest':
+        if not re.search(r'\b(protest|riot|clash|riot|unrest|demonstration|strike|violence|civilian|killed|fatalit)', text, re.I):
+            reason='No civil-unrest event signal'
     elif cat in OPERATIONAL:
         if not consequential and impact<20: reason='No concrete operational impact identified'
         if area=='GLOBAL' and not raw.get('_us_impact'): reason='No established domestic/regional impact'

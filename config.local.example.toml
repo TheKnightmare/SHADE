@@ -20,3 +20,40 @@ category = "chatter"
 enabled = false
 emcomm_only = false
 min_poll_seconds = 3600
+
+# Public Telegram previews: text and metadata only; keep a conservative
+# 30–60 minute interval because all channels share one upstream domain.
+[[sources]]
+id = "telegram-geopwatch"
+kind = "telegram_preview"
+name = "GeoPWatch Telegram preview"
+url = "https://t.me/s/GeoPWatch"
+source_type = "community"
+source_family = "telegram-GeoPWatch"
+category = "chatter"
+enabled = false
+min_poll_seconds = 3600
+
+[[sources]]
+id = "telegram-osintdefender"
+kind = "telegram_preview"
+name = "OSINTdefender Telegram preview"
+url = "https://t.me/s/OSINTdefender"
+source_type = "community"
+source_family = "telegram-OSINTdefender"
+category = "chatter"
+enabled = false
+min_poll_seconds = 3600
+
+# ACLED US Crisis Monitor (requires an operator-provided key).
+[[sources]]
+id = "acled-us"
+kind = "acled_api"
+name = "ACLED US Crisis Monitor"
+url = "https://api.acleddata.com/acled/read?country=United%20States"
+source_type = "official"
+source_family = "acled"
+category = "civil-unrest"
+enabled = false
+api_key_env = "ACLED_API_KEY"
+min_poll_seconds = 3600

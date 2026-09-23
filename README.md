@@ -60,6 +60,7 @@ suppression filters but never makes expired warnings active in NOW.
 shade show 214
 shade mark 214 review
 shade format 214
+shade bulletin --window 6h --min-score 35 --category cyber,top-news
 shade mark 214 tx_candidate
 # A licensed operator independently decides whether/how to transmit.
 shade mark 214 sent
@@ -70,6 +71,12 @@ shade mark 214 rejected
 Use a real ID from your inbox in place of 214. Formatting requires REVIEW or
 TX_CANDIDATE and does not transmit. `show` explains the score, attribution,
 timestamps, every evidence URL and next valid workflow transitions.
+
+`bulletin` is a read-only export for the evening operator workflow. It gathers
+current REVIEW and TX_CANDIDATE items, ranks them with the normal queue policy,
+splits them into numbered JS8 messages within the configured character limit,
+and writes a plain-text train under `data/exports/` (or `--output`). It does not
+change workflow state and never transmits.
 
 ## Relevance and freshness
 

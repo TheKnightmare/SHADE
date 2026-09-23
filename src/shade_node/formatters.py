@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import json
+from datetime import datetime, timezone
 from .relevance import remaining
 
 
@@ -46,6 +47,45 @@ def traffic_message(
 
 # Compatibility for integrations written against the 0.1 formatter API.
 ghostnet_message = traffic_message
+
+
+def split_message(text: str, max_chars: int) -> list[str]:
+    """Split a JS8 message at sentence/clause/word boundaries."""
+    if max_chars < 1:
+        raise ValueError('max_chars must be positive')
+    text = compact(text)
+    parts = []
+    while len(text) > max_chars:
+        cut = max((m.end() for m in re.finditer(r'[.!?;,:]\s+', text[:max_chars])), default=0)
+        if cut < max_chars // 2:
+            cut = text[:max_chars + 1].rfind(' ')
+        if cut <= 0:
+            cut = max_chars
+        parts.append(text[:cut].rstrip())
+        text = text[cut:].lstrip()
+    if text:
+        parts.append(text)
+    return parts
+
+
+def bulletin_messages(items, *, callsign, network, max_chars=500, mode='standard', region_label=''):
+    """Render reviewed queue items as a numbered, manually-transmitted train."""
+    stamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%MZ')
+    header = f"@{network} BULLETIN {callsign} GENERATED:{stamp} ITEMS:{len(items)}"
+    bodies = []
+    for claim, observations in items:
+        bodies.extend(split_message(traffic_message(claim, observations, callsign=callsign,
+            network=network, max_chars=max_chars, mode=mode, region_label=region_label), max_chars))
+    total = 1 + len(bodies)
+    # Re-split once using the final numbering overhead so every transmitted
+    # line, including the header, remains within the operator limit.
+    payload = [header, *bodies]
+    width = len(str(total)) * 2 + 2
+    while any(len(text) + width > max_chars for text in payload):
+        payload = [header] + [part for body in payload[1:] for part in split_message(body, max_chars - width)]
+        total = len(payload)
+        width = len(str(total)) * 2 + 2
+    return [f"{index}/{total} {text}" for index, text in enumerate(payload, 1)]
 
 
 def evidence_summary(claim, observations):

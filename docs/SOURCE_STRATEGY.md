@@ -188,3 +188,12 @@ filling airtime with weakly sourced chatter.
   move it to the human watchlist.
 - Review the automatic list monthly. Remove dead feeds and record the last
   successful verification date.
+
+Telegram public previews are discovery-only community inputs: they are
+rate-limited globally by upstream domain, never include downloaded media, and
+remain unverified until an official or media family corroborates the claim.
+ACLED's registered US Crisis Monitor API is an official civil-unrest dataset;
+its event date, location, actors, notes, and fatality fields can independently
+clear a community unrest claim. Multiple community families alone do not clear
+corroboration because unrest channels commonly mirror the same originating
+claim.
