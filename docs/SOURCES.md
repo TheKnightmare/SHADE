@@ -154,6 +154,26 @@ national and global terms remain keyword-only. `google_news_search` can query a
 whole tier or an explicit per-source term list. Matching remains exact/simple;
 SHADE does not generate, expand, or fuzzy-match keywords.
 
+## Federal land-management and alert archives
+
+`nps_alerts` uses the official NPS API (`developer.nps.gov/api/v1/alerts`) and
+requires an API key in `NPS_API_KEY` (or the configured `api_key_env`). Park
+codes are configured per source; `grsm` is the initial Great Smoky Mountains
+example. `inciweb` uses InciWeb's published active-incidents RSS endpoint and
+filters by configured forest/region terms. These are official public-safety
+inputs, but InciWeb coverage depends on incident reporting and is not a
+replacement for state or local fire/closure feeds.
+
+`ipaws_archive` uses FEMA OpenFEMA's `IpawsArchivedAlerts` dataset without
+authentication. FEMA publishes this archive with a mandatory 24-hour delay by
+design. It is **not real-time and must never be treated as a live alert source**.
+Its value is retrospective pattern tracking—what fired nationally or
+regionally yesterday. Whether it belongs in the main relevance-scored queue or
+in a separate lagging-reference view remains an open design question; operators
+should keep it disabled until that presentation decision is made. Real-time
+IPAWS access requires a formal FEMA alerting-authority agreement and is out of
+scope.
+
 ## Nationwide work zones and chokepoints
 
 `wzdx_registry` uses the USDOT ITS DataHub WZDx Feed Registry at

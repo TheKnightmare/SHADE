@@ -32,6 +32,42 @@ min_poll_seconds = 1800
 # If a registered feed requires authentication, set api_key_env to the
 # operator-approved environment variable; never put the key in TOML.
 # api_key_env = "WZDX_API_KEY"
+
+[[sources]]
+id = "nps-alerts"
+kind = "nps_alerts"
+name = "National Park Service alerts"
+url = "https://developer.nps.gov/api/v1/alerts?limit=50"
+source_type = "official"
+source_family = "nps"
+category = "public-safety"
+park_codes = ["grsm"]
+api_key_env = "NPS_API_KEY"
+enabled = false
+min_poll_seconds = 900
+
+[[sources]]
+id = "inciweb-active"
+kind = "inciweb"
+name = "InciWeb active incidents"
+url = "https://inciweb.wildfire.gov/incidents/rss.xml"
+source_type = "official"
+source_family = "inciweb"
+category = "public-safety"
+region_terms = ["Pisgah", "Cherokee", "Daniel Boone", "Tennessee", "North Carolina"]
+enabled = false
+min_poll_seconds = 900
+
+[[sources]]
+id = "ipaws-archive"
+kind = "ipaws_archive"
+name = "FEMA IPAWS archived alerts (24-hour delayed)"
+url = "https://www.fema.gov/api/open/v1/IpawsArchivedAlerts?$top=1000"
+source_type = "official"
+source_family = "ipaws-archive"
+category = "public-safety"
+enabled = false
+min_poll_seconds = 3600
 # Optional request contact override without changing the base station file:
 # [collection]
 # user_agent = "SHADE/0.3 (set-a-real-contact@example.invalid)"

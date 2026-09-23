@@ -449,6 +449,52 @@ def parse_wzdx_feed(source, data, *, state='US', feed_url=None):
     return observations
 
 
+def parse_nps_alerts(source, data):
+    payload = _json(data)
+    rows = payload.get('data', []) if isinstance(payload, dict) else []
+    result = []
+    allowed = {code.lower() for code in source.park_codes}
+    for item in rows if isinstance(rows, list) else []:
+        park = item.get('parkCode') or item.get('park_code') or ''
+        if allowed and park.lower() not in allowed:
+            continue
+        result.append(Observation(source.id, source.name, 'official', 'nps',
+            str(item.get('id') or item.get('url') or item.get('title')), item.get('title') or 'NPS alert',
+            item.get('description') or item.get('category') or '', item.get('url') or source.url,
+            category='public-safety', location=item.get('parkCode') or item.get('parkName') or '',
+            severity=(item.get('category') or 'moderate').lower(), published_at=item.get('lastIndexedDate') or item.get('lastUpdatedDate') or '',
+            raw={**item, '_park_code': park, '_area': source.area}))
+    return result
+
+
+def parse_inciweb(source, data):
+    rows = parse_rss(source, data)
+    terms = [term.lower() for term in source.region_terms]
+    if not terms:
+        return [Observation(x.source_id, x.source_name, 'official', 'inciweb', x.external_id, x.title, x.body, x.url,
+            category='public-safety', location=x.location, severity=x.severity, published_at=x.published_at,
+            raw={**x.raw, '_area': source.area}) for x in rows]
+    return [Observation(x.source_id, x.source_name, 'official', 'inciweb', x.external_id, x.title, x.body, x.url,
+        category='public-safety', location=x.location, severity=x.severity, published_at=x.published_at,
+        raw={**x.raw, '_area': source.area}) for x in rows if any(term in (x.title + ' ' + x.body).lower() for term in terms)]
+
+
+def parse_ipaws_archive(source, data):
+    payload = _json(data)
+    rows = payload.get('IpawsArchivedAlerts', payload.get('data', [])) if isinstance(payload, dict) else []
+    result = []
+    for item in rows if isinstance(rows, list) else []:
+        title = item.get('info_headline') or item.get('info_event') or item.get('event') or 'Archived IPAWS alert'
+        body = item.get('info_description') or item.get('note') or ''
+        location = item.get('area_areadesc') or item.get('areaDesc') or item.get('state') or ''
+        published = item.get('sent') or item.get('info_effective') or ''
+        result.append(Observation(source.id, source.name, 'official', 'ipaws-archive',
+            str(item.get('identifier') or item.get('id') or title), title, body, item.get('info_web') or source.url,
+            category='public-safety', location=location, severity=(item.get('info_severity') or 'unknown').lower(),
+            published_at=published, raw={**item, '_lagging_archive': True, '_area': source.area}))
+    return result
+
+
 def _collect_wzdx_registry(source, *, user_agent, timeout, max_bytes):
     headers = {}
     key = os.environ.get(source.api_key_env, '') if source.api_key_env else ''
@@ -554,6 +600,9 @@ PARSERS = {
     "mastodon_hashtag": parse_mastodon,
     "google_news_search": parse_rss,
     "wzdx_registry": parse_wzdx_feed,
+    "nps_alerts": parse_nps_alerts,
+    "inciweb": parse_inciweb,
+    "ipaws_archive": parse_ipaws_archive,
 }
 
 
@@ -571,6 +620,15 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
         return _collect_mastodon(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
     if source.kind == 'wzdx_registry':
         return _collect_wzdx_registry(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
+    if source.kind == 'nps_alerts':
+        key = os.environ.get(source.api_key_env or 'NPS_API_KEY', '')
+        if not key:
+            raise CollectionError('missing credential environment variable: ' + (source.api_key_env or 'NPS_API_KEY'))
+        parsed = urlparse(source.url); query = parse_qs(parsed.query)
+        if source.park_codes: query['parkCode'] = [','.join(source.park_codes)]
+        url = urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+        headers['X-Api-Key'] = key
+        return parser(source, fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers))
     if source.kind == 'google_news_search':
         terms = source.query_terms or source.keywords.get(source.keyword_tier, [])
         if not terms:

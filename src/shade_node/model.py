@@ -101,6 +101,8 @@ class SourceConfig:
     keyword_tier: str = ''
     query_terms: list[str] = field(default_factory=list)
     keywords: dict[str, list[str]] = field(default_factory=dict, repr=False)
+    park_codes: list[str] = field(default_factory=list)
+    region_terms: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         from urllib.parse import urlsplit

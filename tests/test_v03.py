@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dataclasses import replace
 from unittest.mock import patch
-from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, parse_wzdx_feed, fetch_bytes, CollectionError
+from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, parse_wzdx_feed, parse_nps_alerts, parse_inciweb, parse_ipaws_archive, fetch_bytes, CollectionError
 from shade_node.db import connect, ingest, queue, claim_detail, housekeeping, transition
 from shade_node.model import Observation
 from shade_node.relevance import age, remaining, evaluate, DEFAULT_POLICY
@@ -264,6 +264,19 @@ class AcceptanceTests(unittest.TestCase):
         self.assertIn('I-40', row.location)
         registry = {'results':[{'state':'TN','status':'inactive','feed_url':'https://dead.test/feed'},{'state':'NC','status':'active','feed_url':'https://live.test/feed'}]}
         self.assertEqual(_wzdx_registry_rows(json.dumps(registry).encode()), [({'state':'NC','status':'active','feed_url':'https://live.test/feed'}, 'https://live.test/feed')])
+
+    def test_nps_inciweb_and_ipaws_archive_parsers(self):
+        from shade_node.model import SourceConfig
+        nps = SourceConfig('nps','nps_alerts','NPS','https://example.test','official','nps',park_codes=['grsm'])
+        rows = parse_nps_alerts(nps, json.dumps({'data':[{'id':'a','parkCode':'grsm','title':'Trail closure','description':'Closed'}]}).encode())
+        self.assertEqual(rows[0].source_family, 'nps')
+        self.assertEqual(parse_nps_alerts(nps, json.dumps({'data':[{'id':'b','parkCode':'acad','title':'Other'}]}).encode()), [])
+        inc = SourceConfig('inc','inciweb','InciWeb','https://example.test','official','inciweb',region_terms=['Cherokee'])
+        rss = b'<rss><channel><item><title>Cherokee Fire</title><description>Incident update</description><guid>1</guid></item></channel></rss>'
+        self.assertEqual(parse_inciweb(inc, rss)[0].source_family, 'inciweb')
+        arc = SourceConfig('arc','ipaws_archive','IPAWS','https://example.test','official','ipaws-archive')
+        archived = parse_ipaws_archive(arc, json.dumps({'IpawsArchivedAlerts':[{'identifier':'x','info_headline':'Test','sent':'2026-09-22T00:00:00Z'}]}).encode())
+        self.assertTrue(archived[0].raw['_lagging_archive'])
 
     def test_trusted_relay_can_advance_without_being_official(self):
         trusted=obs(source_type='community',source_family='s2-underground-wire',category='chatter',
