@@ -156,7 +156,7 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
         context_pattern=(r'\b(white house|congress|supreme court|federal government|president|election|government shutdown|'
                          r'tariff|sanction|inflation|interest rate|recession|market crash|bank failure|war|attack|airstrike|'
                          r'ceasefire|invasion|missile|military|nuclear|cyberattack|outage|airport|flight|rail|port|shipping|'
-                         r'supply chain|shortage|outbreak|pandemic|epidemic|recall|hurricane|tornado|flood|wildfire|earthquake|breach|hacked|hack|ransomware|fbi|federal bureau|data leak|immigration|ice|deportation|national guard|federal agents?|civil rights|shooting|protest|unrest|hormuz|bab al[- ]mandab|refinery|diesel|gasoline|fuel crisis)\b')
+                         r'supply chain|shortage|outbreak|pandemic|epidemic|recall|hurricane|tornado|flood|wildfire|earthquake|breach|hacked|hack|ransomware|fbi|federal bureau|data leak|immigration|ice|deportation|national guard|federal agents?|civil rights|shooting|protest|unrest|hormuz|bab al[- ]mandab|refinery|diesel|gasoline|fuel crisis|beef|restaurant closures?|fast food|w[ée]ndy)\b')
         fuel_pattern=r'\b(?:gas(?:oline)?|diesel|oil|fuel)\b.{0,50}\b(?:price|cost|rise|surge|spike|increase|shortage|supply)\b|\b(?:price|cost)\b.{0,50}\b(?:gas(?:oline)?|diesel|oil|fuel)\b'
         if not re.search(context_pattern+'|'+fuel_pattern,text,re.I): reason='No clear national operational or civic impact trigger'
         durable = bool(re.search(r'\b(?:fuel|diesel|gasoline|oil|hormuz|bab al[- ]mandab|immigration|ice|deportation|national guard|civil rights|unrest|protest)\b', text, re.I))

@@ -290,6 +290,15 @@ class AcceptanceTests(unittest.TestCase):
             db.execute('UPDATE source_presence SET active=0')
             self.assertEqual(queue(db,now=NOW),[])
 
+    def test_faa_ground_stop_is_major_and_dca_is_named(self):
+        from shade_node.collectors import parse_faa
+        from shade_node.model import SourceConfig
+        s=SourceConfig('faa','faa_status','FAA','https://example.test','official','faa')
+        data=b'<AIRPORT_STATUS_INFORMATION><Delay_type><Name>Ground Stops</Name><Ground_Stop_List><Ground_Stop><ARPT>DCA</ARPT><Reason>weather</Reason></Ground_Stop></Ground_Stop_List></Delay_type></AIRPORT_STATUS_INFORMATION>'
+        item=parse_faa(s,data)[0]
+        self.assertEqual(item.location,'Reagan Washington National Airport')
+        self.assertEqual(item.severity,'severe')
+
     def test_resolved_status_report_is_not_active(self):
         self.assertEqual(self.visible(obs(raw={'status':'resolved'})),[])
 

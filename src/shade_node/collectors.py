@@ -243,7 +243,7 @@ def parse_faa(source, data):
     except ET.ParseError as exc: raise CollectionError('Invalid FAA XML') from exc
     if root.tag!='AIRPORT_STATUS_INFORMATION': raise CollectionError('Invalid FAA status schema')
     result=[]
-    places={'TYS':'Knoxville TN','TRI':'Tri-cities TN','AVL':'Asheville NC','CHA':'Chattanooga TN',
+    places={'DCA':'Reagan Washington National Airport','IAD':'Washington Dulles International Airport','TYS':'Knoxville TN','TRI':'Tri-cities TN','AVL':'Asheville NC','CHA':'Chattanooga TN',
             'BNA':'Nashville TN','MEM':'Memphis TN','ATL':'Atlanta GA','CLT':'Charlotte NC','RDU':'Raleigh NC','SDF':'Louisville KY','LEX':'Lexington KY'}
     for group in root.findall('Delay_type'):
         kind=group.findtext('Name','')
@@ -255,7 +255,8 @@ def parse_faa(source, data):
             major_delay=bool(hours and int(hours[1])>=2)
             # General aviation restrictions are not a full passenger-airport shutdown.
             closure=kind=='Airport Closures' and not re.search(r'TRANSIENT|NON SKED|PPR',reason,re.I)
-            severe=closure or major_delay
+            ground_stop=bool(re.search(r'ground\s+stop', kind, re.I))
+            severe=closure or major_delay or ground_stop
             identity=sha256((airport+'|'+kind+'|'+reason+'|'+item.findtext('Start','')).encode()).hexdigest()
             raw={'xml':ET.tostring(item,encoding='unicode'),'_snapshot':True,'_area':'NATIONAL',
                  'event_type':kind,'airport':airport,'average_delay':average}
