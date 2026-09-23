@@ -94,6 +94,18 @@ pack = "regional"
 min_poll_seconds = 3600
 
 [[sources]]
+id = "aaa-fuel-prices"
+kind = "rss"
+name = "AAA Fuel Prices Newsroom"
+url = "https://newsroom.aaa.com/category/fuel-prices/feed/"
+source_type = "media"
+source_family = "aaa-fuel"
+category = "fuel"
+area = "NATIONAL"
+pack = "energy"
+min_poll_seconds = 3600
+
+[[sources]]
 id = "tdot-east-events"
 kind = "tdot_events"
 name = "TDOT SmartWay East Tennessee Major Events"
@@ -224,3 +236,27 @@ category = "top-news"
 area = "NATIONAL"
 pack = "top-news"
 min_poll_seconds = 900
+
+[[sources]]
+id = "cnbc-top"
+kind = "rss"
+name = "CNBC Top News"
+url = "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+source_type = "media"
+source_family = "cnbc"
+category = "top-news"
+area = "NATIONAL"
+pack = "top-news"
+min_poll_seconds = 900
+
+[[sources]]
+id = "aljazeera-top"
+kind = "rss"
+name = "Al Jazeera World News"
+url = "https://www.aljazeera.com/xml/rss/all.xml"
+source_type = "media"
+source_family = "al-jazeera"
+category = "top-news"
+area = "NATIONAL"
+pack = "top-news"
+min_poll_seconds = 1800

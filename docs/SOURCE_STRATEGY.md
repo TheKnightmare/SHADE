@@ -46,7 +46,7 @@ out. A lane closure does not prove the cause reported by a caller or social post
 | Knoxville Focus | `https://knoxfocus.com/feed/` | Media | Community newspaper serving Knox County |
 | East Tennessee Enlightener | `https://etenlightener.org/feed/` | Media | Center-city and historically under-covered community reporting |
 | KnoxViews | `https://knoxviews.com/rss.xml` | Community | Citizen discussion and local-government chatter; unverified by default |
-| Reddit Knoxville/Asheville/Tri-Cities | Public Atom feeds in private config | Community | Discovery only; rate limits and reposts are expected |
+| Reddit Knoxville/Asheville/Tri-Cities | Removed from active configuration after repeated HTTP 429 responses | Community | Human watchlist only; do not bypass Reddit rate limits |
 
 The local-community pack is deliberately keyword-gated. Routine opinion,
 events, sports, and lifestyle posts are retained as evidence but do not enter

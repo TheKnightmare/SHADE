@@ -207,6 +207,18 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(self.visible(quiet_top,'context'),[])
         self.assertEqual(self.visible(noisy_body),[])
 
+    def test_fuel_price_and_durable_ice_context_are_visible(self):
+        fuel=obs(category='fuel',source_type='official',source_family='eia',
+                 title='Diesel prices hit record as shipping disruptions tighten supply',
+                 body='National diesel price and crude oil costs rise.',location='United States',
+                 raw={'_area':'NATIONAL'})
+        self.assertEqual(len(self.visible(fuel)),1)
+        ice=obs(category='top-news',source_type='media',source_family='cnbc',
+                title='ICE enforcement protests and civil rights probe continue in Minneapolis',
+                body='Federal agents and National Guard remain part of the ongoing story.',
+                location='',published_at='2026-09-21T02:00:00Z',raw={'_area':'NATIONAL'})
+        self.assertEqual(len(self.visible(ice,'context')),1)
+
     def test_insecure_fetch_refused_without_network(self):
         with self.assertRaises(CollectionError):fetch_bytes('http://example.test',user_agent='test',timeout=1,max_bytes=10)
 

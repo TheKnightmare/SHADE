@@ -21,6 +21,8 @@ official, local-community, and top-news endpoints were verified on 2026-09-22.
 | regional | https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries | fema / hourly | Pack filters TN/NC/KY/GA, orders declarationDate descending, caps 100 records. County rows and declaration dates; lagging administrative evidence, not warning dispatch. |
 | transportation | https://nasstatus.faa.gov/api/airport-status-information | faa / 15 min | Full closures and 2h+ delays; transient/general-aviation restrictions suppressed. Snapshot absence/30-minute freshness ends active visibility. First observation is used when origin time is unavailable; not a flight-planning service. |
 | health (disabled) | https://tools.cdc.gov/api/v2/resources/media/413690.rss | cdc / hourly | HTTP 200 but zero items and March 2025 build date. Do not claim working public-health coverage. |
+| top-news / CNBC | https://www.cnbc.com/id/100003114/device/rss/rss.html | cnbc / 15 min | National market and energy context; context prompt, not local confirmation. |
+| top-news / Al Jazeera | https://www.aljazeera.com/xml/rss/all.xml | al-jazeera / 30 min | International conflict and shipping context; corroborate operational effects locally. |
 
 Source documentation and attribution:
 
@@ -45,15 +47,16 @@ remains UNVERIFIED. Mirrors/reposts must retain the origin's family.
 
 The private local configuration adds RSS/Atom feeds from WATE, WBIR, WVLT, WJHL,
 Blue Ridge Public Radio, Mountain Xpress, Tennessee Lookout, and
-North Carolina Health News, plus public subreddit feeds for Knoxville, Asheville,
-and the Tri-Cities. These
+North Carolina Health News, plus operator-approved community sources. These
 are intentionally treated as media or community discovery sources. A local
 headline can surface a consequential event, but it does not become confirmed
 unless an official source or an independent originating family corroborates it.
 The former WCYB and WLOS feed URLs returned 404 on 2026-09-22 and are retained
 disabled as manual-watch sources rather than replaced with invented or
-unofficial feeds. Reddit may return 429 despite a one-hour minimum interval;
-that is a partial source failure, not permission to bypass its rate limit.
+unofficial feeds. Reddit's public RSS endpoints repeatedly returned HTTP 429,
+so the Reddit feeds were removed from the active configuration rather than
+retrying around the limit. Use the local media, official feeds, and approved
+Telegram previews for discovery instead.
 
 X is best used as a watchlist/discovery layer for named local agencies, stations,
 reporters, utilities, road authorities, and eyewitnesses. It should not be
@@ -66,6 +69,13 @@ Request policy: timeout 20 seconds and 5 MB limit by default, HTTPS redirects
 only, no rapid retries, persistent 15-minute/hourly cooldowns. Failures back off
 at least 30 minutes and honor longer Retry-After headers. Do not bypass a source
 block; disable it and review its terms. Partial failures are reported by source.
+
+This source list is expected to be tuned. SHADE separates discovery from
+eligibility: adding a feed can improve recall without making every headline
+transmit-ready. For slow-building conditions such as fuel-price shocks or a
+sustained enforcement/protest pattern, the relevance policy keeps strong
+national context visible for up to seven days while still requiring current,
+attributable evidence before transmission.
 
 
 The regional pack also uses the [official USGS FDSN query API](https://earthquake.usgs.gov/fdsnws/event/1/)

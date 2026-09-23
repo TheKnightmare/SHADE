@@ -143,6 +143,10 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
     elif row['source_family']=='gdacs':
         if not row['title'].lower().startswith('red '): reason='Non-exceptional global disaster notice'
         else: parts['impact']=30
+    elif cat == 'fuel':
+        fuel_signal = r'\b(?:gas(?:oline)?|diesel|oil|fuel|crude|barrel)\b.{0,80}\b(?:price|cost|rise|surge|spike|increase|record|shortage|supply|disruption|shipping)\b|\b(?:price|cost|record|shortage|supply|disruption)\b.{0,80}\b(?:gas(?:oline)?|diesel|oil|fuel|crude|barrel)\b'
+        if not re.search(fuel_signal, text, re.I): reason='No clear fuel-price or supply-impact signal'
+        else: parts['impact']=20
     elif cat=='top-news':
         # These are deliberately isolated from the operational inbox. Their job
         # is to prompt a local-impact check, not to become transmit-ready facts.
@@ -150,10 +154,13 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
         context_pattern=(r'\b(white house|congress|supreme court|federal government|president|election|government shutdown|'
                          r'tariff|sanction|inflation|interest rate|recession|market crash|bank failure|war|attack|airstrike|'
                          r'ceasefire|invasion|missile|military|nuclear|cyberattack|outage|airport|flight|rail|port|shipping|'
-                         r'supply chain|shortage|outbreak|pandemic|epidemic|recall|hurricane|tornado|flood|wildfire|earthquake|breach|hacked|hack|ransomware|fbi|federal bureau|data leak)\b')
+                         r'supply chain|shortage|outbreak|pandemic|epidemic|recall|hurricane|tornado|flood|wildfire|earthquake|breach|hacked|hack|ransomware|fbi|federal bureau|data leak|immigration|ice|deportation|national guard|federal agents?|civil rights|shooting|protest|unrest|hormuz|bab al[- ]mandab|refinery|diesel|gasoline|fuel crisis)\b')
         fuel_pattern=r'\b(?:gas(?:oline)?|diesel|oil|fuel)\b.{0,50}\b(?:price|cost|rise|surge|spike|increase|shortage|supply)\b|\b(?:price|cost)\b.{0,50}\b(?:gas(?:oline)?|diesel|oil|fuel)\b'
         if not re.search(context_pattern+'|'+fuel_pattern,text,re.I): reason='No clear national operational or civic impact trigger'
-        elif hours>36: reason='Top-news context is older than 36 hours'
+        durable = bool(re.search(r'\b(?:fuel|diesel|gasoline|oil|hormuz|bab al[- ]mandab|immigration|ice|deportation|national guard|civil rights|unrest|protest)\b', text, re.I))
+        if durable:
+            parts['impact'] = 15
+        if hours > (168 if durable else 36): reason='Top-news context is older than its freshness window'
     elif cat=='chatter':
         # Community/body text often contains navigation, promos, or incidental
         # words such as “shelter.” Require the actual headline to carry the

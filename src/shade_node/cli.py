@@ -115,8 +115,10 @@ def _main(argv: list[str] | None = None) -> int:
         try:
             with closing(sqlite3.connect(Path(settings.database).resolve().as_uri()+'?mode=ro',uri=True)) as connection:
                 if connection.execute('PRAGMA quick_check').fetchone()[0]!='ok': issues.append('Database integrity problem')
+                active_ids = {source.id for source in active_sources(settings, mode)}
                 for row in connection.execute("SELECT source_id,error FROM source_polls WHERE success=0 AND error<>''"):
-                    issues.append(f"Source failure: {row[0]}")
+                    if row[0] in active_ids:
+                        issues.append(f"Source failure: {row[0]}")
         except (OSError,sqlite3.Error): issues.append('Database inaccessible')
         print('MODE: '+mode.upper()+' | TRANSMISSION: human only')
         print('SOURCES: '+str(len(active_sources(settings,mode))))
