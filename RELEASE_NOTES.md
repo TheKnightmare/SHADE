@@ -1,5 +1,13 @@
 # SHADE 0.4.0 local-signal and top-news beta
 
+- Replaced the desktop icon with the OSINT arrows artwork and added a brief,
+  identity-free startup splash screen.
+- Added EIA gasoline/diesel and WTI/Brent pricing, complete FEMA Region 4
+  declarations, and EFF civil-liberties coverage.
+- Added civil-liberties and politics keyword tiers, explicit NWS fire-weather
+  tagging, and a local seasonal/tourism reporting carve-out.
+- Added lead-source and supporting-footnote attribution plus a separate chatter
+  display count that never affects confidence or transmission eligibility.
 - Added a separate Top news/context lane so national and world headlines prompt
   a local-impact check without crowding the operational inbox.
 - Added verified NPR National, PBS NewsHour, and BBC World source packs with a

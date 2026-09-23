@@ -17,8 +17,10 @@ official, local-community, and top-news endpoints were verified on 2026-09-22.
 | cyber / KEV | https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json | cisa / hourly | Catalog addition date is not exploit onset. Patch relevance requires checking local assets. |
 | cyber / advisories | https://www.cisa.gov/cybersecurity-advisories/all.xml | cisa / hourly | Same family as KEV; generic vulnerability templates do not establish active exploitation. |
 | communications | https://www.cloudflarestatus.com/api/v2/summary.json | cloudflare / 15 min | Operator-origin self-report, not all Internet or cellular outages. Domestic component evidence required. Resolved/disappeared snapshots hidden. |
-| energy | https://www.eia.gov/rss/todayinenergy.xml | eia / hourly | Official energy context, not a real-time grid/pipeline/refinery disruption monitor. Routine prices/production stories hidden. |
-| regional | https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries | fema / hourly | Pack filters TN/NC/KY/GA, orders declarationDate descending, caps 100 records. County rows and declaration dates; lagging administrative evidence, not warning dispatch. |
+| energy / retail prices | https://api.eia.gov/v2/petroleum/pri/gnd/data/ | eia / weekly | Official gasoline/diesel retail prices for the U.S. plus PADD 1, 2, and 3 covering the Southeast's overlapping petroleum regions. Requires `EIA_API_KEY`; weekly cadence follows the dataset. |
+| energy / crude spot | https://api.eia.gov/v2/petroleum/pri/spt/data/ | eia / daily | Official WTI/Brent commodity context. Price observations remain separate from outage/supply claims. |
+| regional | https://www.fema.gov/api/open/v1/DisasterDeclarationsSummaries | fema-disaster-decl / hourly | Filters all FEMA Region 4 states (AL, FL, GA, KY, MS, NC, SC, TN), orders declaration date descending, and caps 100 records. OpenFEMA documents a 20-minute refresh frequency; this is administrative declaration evidence, not warning dispatch. |
+| civil-liberties | https://www.eff.org/rss/updates.xml | eff / hourly | EFF media reporting. National items still require a concrete operational impact under the existing relevance rule. |
 | transportation | https://nasstatus.faa.gov/api/airport-status-information | faa / 15 min | Full closures and 2h+ delays; transient/general-aviation restrictions suppressed. Snapshot absence/30-minute freshness ends active visibility. First observation is used when origin time is unavailable; not a flight-planning service. |
 | health (disabled) | https://tools.cdc.gov/api/v2/resources/media/413690.rss | cdc / hourly | HTTP 200 but zero items and March 2025 build date. Do not claim working public-health coverage. |
 | top-news / CNBC | https://www.cnbc.com/id/100003114/device/rss/rss.html | cnbc / 15 min | National market and energy context; context prompt, not local confirmation. |
@@ -30,8 +32,9 @@ Source documentation and attribution:
 - [USGS GeoJSON](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php)
 - [CISA's official KEV data repository](https://github.com/cisagov/kev-data): describes JSON/CSV, update cadence and CC0 terms. If using its mirror, retain family `cisa`.
 - [Cloudflare status API](https://www.cloudflarestatus.com/api): explicitly supports automated JSON polling and asks for an identifiable User-Agent; do not scrape its HTML pages.
-- [EIA native RSS subscriptions](https://www.eia.gov/tools/rssfeeds/): intended for periodic reader polling.
-- [OpenFEMA dataset](https://www.fema.gov/openfema-data-page/disaster-declarations-summaries-v2): official JSON API; the documentation page returned 403 to the research browser but the data API responded with its documented schema.
+- [EIA Open Data API v2](https://www.eia.gov/opendata/documentation.php): the `petroleum/pri/gnd` route provides weekly gasoline/diesel retail prices and `petroleum/pri/spt` provides WTI/Brent spot prices. API keys come from the environment, never station files.
+- [OpenFEMA Disaster Declarations Summaries](https://www.fema.gov/about/openfema/data-sets/disaster-declarations-summaries-v1): official JSON API with a documented `R/PT20M` refresh frequency. That publication refresh is distinct from the separate 24-hour IPAWS archive delay.
+- [EFF updates RSS](https://www.eff.org/rss/updates.xml): current EFF syndication feed used as media evidence.
 - [FAA developer FAQ](https://www.fly.faa.gov/fly/FAQ/faq): links the public machine-readable airport status endpoint.
 - [CDC HAN](https://www.cdc.gov/han/php/about/): use official public notices manually until a maintained feed is verified.
 - [TEMA current status](https://www.tn.gov/tema/current-status.html) and [NC emergency management](https://www.ncdps.gov/our-organization/emergency-management): no dependable native incident feed verified in this work. No scraper was added.
@@ -42,6 +45,10 @@ rail, public-health and county emergency dispatch incidents. Additional approved
 RSS/Atom feeds can be added privately. Do not label community reporting official.
 The disabled community template uses `source_type="community"`, and one family
 remains UNVERIFIED. Mirrors/reposts must retain the origin's family.
+
+There is no verified nationwide API for current burn-ban status. NWS Red Flag
+Warnings and Fire Weather Watches are tagged `fire-weather` and surfaced in the
+NOW lane, but they describe hazardous conditions rather than a legal burn ban.
 
 ## Local signal layer
 
@@ -153,12 +160,31 @@ transcripts are collected implicitly.
 ## Shared keyword catalog
 
 `keywords.toml` is loaded alongside the station configuration at startup. Its
-`keywords.local`, `keywords.regional`, `keywords.national`, and
-`keywords.global` blocks are the single source for query-driven collectors.
+`keywords.local`, `keywords.regional`, `keywords.national`, `keywords.global`,
+`keywords.civil-liberties`, and `keywords.politics` blocks are the single source
+for query-driven collectors.
 Mastodon derives tag-safe candidates only from local and regional terms;
 national and global terms remain keyword-only. `google_news_search` can query a
 whole tier or an explicit per-source term list. Matching remains exact/simple;
 SHADE does not generate, expand, or fuzzy-match keywords.
+
+Civil-liberties and politics items use the same national-impact rule as other
+national categories: a concrete operational effect is required, and routine
+commentary remains suppressed. Local media coverage of leaf season, park access,
+trail/road closures, and tourism-impact conditions has an explicit carve-out from
+the routine-newsletter suppression rule.
+
+## Claim correlation display
+
+For a claim with multiple observations, SHADE selects one display lead by source
+tier (`official` before `media` before `community`) and labels every remaining
+observation as a supporting footnote. The lead and supporting families also appear
+in prepared bulletin attribution.
+
+`CHATTER` is a separate display signal showing total mentions, distinct source IDs,
+and the observation window. It never changes confidence, significance, or the
+`TX_CANDIDATE` gate. Repeated community reporting still requires the explicit
+operator relay override when no official or media evidence exists.
 
 ## Federal land-management and alert archives
 

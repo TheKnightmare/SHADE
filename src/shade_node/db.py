@@ -326,6 +326,10 @@ def claim_detail(connection, claim_id, policy=None, now=None):
     claim=connection.execute('SELECT * FROM claims WHERE id=?',(claim_id,)).fetchone()
     if not claim: raise ValueError(f'claim {claim_id} not found')
     rows=evidence_rows(connection,claim_id)
+    rank={'official':3,'media':2,'community':1}
+    rows.sort(key=lambda row:(rank.get(row['source_type'],0),row['published_at'],row['observed_at']),reverse=True)
+    for index,row in enumerate(rows):
+        row['display_role']='lead' if index == 0 else 'supporting'
     return assess(claim,rows,policy,now),rows
 
 

@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dataclasses import replace
 from unittest.mock import patch
-from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, parse_wzdx_feed, parse_nps_alerts, parse_inciweb, parse_ipaws_archive, fetch_bytes, CollectionError
+from shade_node.collectors import parse_nws, parse_kev, parse_status, parse_fema, parse_eia_prices, parse_rss, parse_telegram_preview, parse_acled, parse_usgs_waterservices, parse_radnet, parse_safecast, parse_mastodon, parse_wzdx_feed, parse_nps_alerts, parse_inciweb, parse_ipaws_archive, fetch_bytes, CollectionError
 from shade_node.db import connect, ingest, queue, claim_detail, housekeeping, transition
 from shade_node.model import Observation
 from shade_node.relevance import age, remaining, evaluate, DEFAULT_POLICY
@@ -43,6 +43,14 @@ class AcceptanceTests(unittest.TestCase):
     def test_active_local_tornado_in_now_only(self):
         self.assertEqual(len(self.visible(weather(),'now')),1)
         self.assertEqual(self.visible(weather()),[])
+
+    def test_fire_weather_is_tagged_and_visible_in_now(self):
+        from shade_node.model import SourceConfig
+        source=SourceConfig('nws','nws_alerts','NWS','https://api.weather.gov/alerts','official','nws')
+        payload={'features':[{'id':'fire-1','properties':{'event':'Red Flag Warning','headline':'Red Flag Warning','areaDesc':'Knox, TN','sent':'2026-09-22T02:00:00Z','effective':'2026-09-22T02:00:00Z','expires':'2026-09-22T04:00:00Z','status':'Actual'}}]}
+        item=parse_nws(source,json.dumps(payload).encode())[0]
+        self.assertEqual(item.category,'fire-weather')
+        self.assertEqual(len(self.visible(item,'now')),1)
 
     def test_routine_and_distant_weather_hidden(self):
         for o in [weather('Special Weather Statement'),weather('Dense Fog Advisory'),weather(location='Fulton, GA')]:
@@ -268,6 +276,48 @@ class AcceptanceTests(unittest.TestCase):
         self.assertNotIn('Iran', hashtags(catalog))
         google = SourceConfig('news', 'google_news_search', 'Google', 'https://news.google.com/rss/search', 'media', 'google-news', keyword_tier='national', keywords=catalog)
         self.assertIn('fuel shortage', google.keywords['national'])
+        self.assertIn('digital privacy', catalog['civil-liberties'])
+        self.assertIn('election administration', catalog['politics'])
+
+    def test_eia_and_region4_fema_fixtures(self):
+        from shade_node.model import SourceConfig
+        from shade_node.collectors import collect
+        eia=SourceConfig('eia','eia_prices','EIA','https://api.eia.gov/v2/petroleum/pri/gnd/data/','official','eia',category='commodity')
+        payload={'response':{'data':[{'period':'2026-09-21','series':'EMM_EPMRR_PTE_R10_DPG','series-description':'PADD 1 regular gasoline','value':'3.45','units':'dollars per gallon'}]}}
+        item=parse_eia_prices(eia,json.dumps(payload).encode())[0]
+        self.assertEqual((item.category,item.source_family,item.location),('commodity','eia','East Coast / PADD 1'))
+        keyed=replace(eia,api_key_env='EIA_API_KEY')
+        with patch.dict('os.environ',{'EIA_API_KEY':'example-key'}), patch('shade_node.collectors.fetch_bytes',return_value=json.dumps(payload).encode()) as fetch:
+            self.assertEqual(len(collect(keyed,user_agent='test',timeout=1,max_bytes=10000)),1)
+            self.assertIn('api_key=example-key',fetch.call_args.args[0])
+            self.assertNotIn('Authorization',fetch.call_args.kwargs['headers'])
+        fema=SourceConfig('fema','fema_disaster_declarations','FEMA','https://www.fema.gov/api/open/v1/DisasterDeclarationsSummaries','official','fema-disaster-decl')
+        raw={'id':'r4','declarationTitle':'SEVERE STORMS','disasterNumber':9999,'designatedArea':'Knox (County)','state':'TN','declarationDate':'2026-09-22T00:00:00Z'}
+        declaration=parse_fema(fema,json.dumps({'DisasterDeclarationsSummaries':[raw]}).encode())[0]
+        self.assertEqual(declaration.source_family,'fema-disaster-decl')
+
+    def test_lead_footnotes_and_chatter_never_bypass_gate(self):
+        with connect(':memory:') as db:
+            title='Major communications outage affecting Knoxville terminal'
+            claim_id,_=ingest(db,obs(source_id='community-0',source_type='community',source_family='community-0',external_id='community-0',title=title))
+            for index in range(1,8):
+                ingest(db,obs(source_id=f'community-{index}',source_type='community',source_family=f'community-{index}',external_id=f'community-{index}',title=title))
+            claim,rows=claim_detail(db,claim_id,now=NOW)
+            self.assertEqual((claim['chatter_mentions'],claim['chatter_sources']), (8,8))
+            self.assertEqual(rows[0]['display_role'],'lead')
+            self.assertTrue(all(row['display_role']=='supporting' for row in rows[1:]))
+            transition(db,claim_id,'REVIEW')
+            with self.assertRaises(ValueError): transition(db,claim_id,'TX_CANDIDATE')
+            summary=evidence_summary(claim,rows)
+            self.assertIn('CHATTER: 8 mentions, 8 sources',summary)
+            self.assertIn('LEAD',summary);self.assertIn('FOOTNOTE',summary)
+            bulletin='\n'.join(bulletin_messages([(claim,rows)],callsign='TEST',network='TEST',max_chars=180))
+            self.assertIn('(F1) SUPPORT',bulletin)
+
+    def test_seasonal_tourism_local_media_carveout(self):
+        item=obs(source_type='media',source_family='local-news',category='chatter',severity='minor',
+                 title='Leaf season park conditions affecting visitation',body='Park road congestion and visitor access update.')
+        self.assertEqual(len(self.visible(item)),1)
 
     def test_wzdx_feed_normalization_and_stale_registry_skip(self):
         from shade_node.collectors import _wzdx_registry_rows

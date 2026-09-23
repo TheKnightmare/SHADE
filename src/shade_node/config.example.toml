@@ -117,7 +117,7 @@ enabled = true
 
 # Optional native public sources; details and limitations in docs/SOURCES.md.
 [source_packs]
-enabled = ["cyber", "communications", "energy", "regional", "transportation"]
+enabled = ["cyber", "communications", "energy", "regional", "transportation", "civil-liberties"]
 
 [relevance]
 minimum_score = 45

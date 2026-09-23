@@ -22,6 +22,8 @@ and preserves every original observation. A changed preview must be reopened.
 The console opens in STANDARD. EXERCISE marks messages at both ends. ACTUAL requires
 an intentional mode choice and separate confirmation before each prepared message.
 The local view refreshes every minute while idle; collection runs only on demand.
+The packaged SHADE artwork supplies the Windows icon and the brief startup splash;
+neither screen reads or displays station identity.
 
 ## Install on another Windows computer
 

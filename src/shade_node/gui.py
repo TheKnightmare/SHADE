@@ -21,6 +21,49 @@ MUTED = '#9bafc2'
 ACCENT = '#59d8ce'
 
 
+def _set_window_icon(window):
+    """Apply both Windows ICO and cross-platform PNG window icons."""
+    try:
+        window.iconbitmap(str(resources.files('shade_node').joinpath('assets/shade.ico')))
+    except tk.TclError:
+        pass
+    try:
+        icon = tk.PhotoImage(file=str(resources.files('shade_node').joinpath('assets/shade-splash.png')))
+        window.iconphoto(True, icon)
+        window._shade_icon = icon
+    except tk.TclError:
+        pass
+
+
+def _show_splash(root):
+    splash = tk.Toplevel(root)
+    splash.overrideredirect(True)
+    splash.configure(bg='#080b0e', highlightbackground=ACCENT, highlightthickness=1)
+    _set_window_icon(splash)
+    body = tk.Frame(splash, bg='#080b0e', padx=28, pady=24)
+    body.pack(fill='both', expand=True)
+    try:
+        artwork = tk.PhotoImage(file=str(resources.files('shade_node').joinpath('assets/shade-splash.png'))).subsample(2, 2)
+        tk.Label(body, image=artwork, bg='#080b0e').pack()
+        splash._shade_artwork = artwork
+    except tk.TclError:
+        pass
+    tk.Label(body, text='SHADE', bg='#080b0e', fg=ACCENT,
+             font=('Segoe UI Semibold', 28)).pack(pady=(12, 0))
+    tk.Label(body, text='BE FREE // FIGHT IN THE SHADE', bg='#080b0e', fg=MUTED,
+             font=('Segoe UI', 10)).pack(pady=(2, 10))
+    tk.Label(body, text='Opening operator console…', bg='#080b0e', fg=TEXT,
+             font=('Segoe UI', 9)).pack()
+    splash.update_idletasks()
+    width, height = splash.winfo_reqwidth(), splash.winfo_reqheight()
+    x = (splash.winfo_screenwidth() - width) // 2
+    y = (splash.winfo_screenheight() - height) // 2
+    splash.geometry(f'{width}x{height}+{x}+{y}')
+    splash.lift()
+    splash.update()
+    return splash
+
+
 class ShadeWindow:
     def __init__(self, root, service):
         self.root, self.service = root, service
@@ -66,10 +109,7 @@ class ShadeWindow:
         r.geometry('1320x850')
         r.minsize(1000, 700)
         r.configure(bg=BG)
-        try:
-            r.iconbitmap(str(resources.files('shade_node').joinpath('assets/shade.ico')))
-        except tk.TclError:
-            pass
+        _set_window_icon(r)
         style = ttk.Style(r)
         style.theme_use('clam')
         style.configure('.', background=BG, foreground=TEXT, font=('Segoe UI', 10))
@@ -112,7 +152,7 @@ class ShadeWindow:
         filters.pack(fill='x', pady=(0, 8))
         for variable, values, width in [
             (self.lane, ['Inbox', 'Top news', 'NOW', 'All evidence'], 14),
-            (self.category, ['All categories','top-news','cyber','infrastructure','communications','grid','fuel','transportation','public-safety','public-health','space-weather','earthquake','weather','disaster','chatter'], 18),
+            (self.category, ['All categories','top-news','cyber','infrastructure','communications','grid','fuel','commodity','transportation','public-safety','public-health','civil-liberties','politics','space-weather','earthquake','weather','fire-weather','disaster','chatter'], 18),
             (self.area, ['All areas','ETN/WNC','REGIONAL','NATIONAL','GLOBAL','DISTANT'], 13),
             (self.state, ['Active states']+list(ALLOWED_TRANSITIONS), 15),
         ]:
@@ -463,8 +503,11 @@ def main(argv=None):
     args = arguments.parse_args(argv)
     root = tk.Tk()
     root.withdraw()
+    _set_window_icon(root)
+    splash = _show_splash(root)
     path = args.config
     if not Path(path).is_file():
+        splash.destroy()
         path = filedialog.askopenfilename(parent=root,title='Choose your existing SHADE config.toml',filetypes=[('TOML configuration','*.toml')])
         if not path:
             root.destroy()
@@ -473,10 +516,17 @@ def main(argv=None):
         service = DesktopService(path)
         ShadeWindow(root,service)
     except Exception as exc:
+        if splash.winfo_exists():
+            splash.destroy()
         messagebox.showerror('SHADE could not open this station',str(exc),parent=root)
         root.destroy()
         return 2
-    root.deiconify()
+    def reveal():
+        if splash.winfo_exists():
+            splash.destroy()
+        root.deiconify()
+        root.lift()
+    root.after(850, reveal)
     root.mainloop()
     return 0
 

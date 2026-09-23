@@ -40,3 +40,21 @@ terms = [
   "Iran", "Israel", "Houthi", "Red Sea", "Strait of Hormuz", "Ukraine",
   "Russia", "Taiwan", "China", "NATO", "nuclear", "invasion"
 ]
+
+[keywords.civil-liberties]
+tier = "civil-liberties"
+terms = [
+  "digital privacy", "government surveillance", "facial recognition",
+  "location tracking", "encryption", "digital rights", "free speech",
+  "press freedom", "journalist subpoena", "protest rights",
+  "warrantless search", "civil liberties"
+]
+
+[keywords.politics]
+tier = "politics"
+terms = [
+  "election administration", "voting access", "ballot access",
+  "polling place closure", "election security", "campaign finance",
+  "public records", "government transparency", "protest permit",
+  "emergency powers"
+]

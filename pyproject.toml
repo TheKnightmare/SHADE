@@ -22,7 +22,7 @@ shade-gui = "shade_node.gui:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-shade_node = ["config.example.toml", "source_packs.toml", "keywords.toml", "assets/*.ico"]
+shade_node = ["config.example.toml", "source_packs.toml", "keywords.toml", "assets/*.ico", "assets/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

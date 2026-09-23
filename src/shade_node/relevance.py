@@ -11,8 +11,9 @@ DEFAULT_POLICY = {
     'local_counties': ['Knox, TN','Blount, TN','Sevier, TN','Anderson, TN','Loudon, TN','Roane, TN','Monroe, TN','McMinn, TN','Bradley, TN','Hamilton, TN','Campbell, TN','Claiborne, TN','Union, TN','Grainger, TN','Jefferson, TN','Hamblen, TN','Cocke, TN','Greene, TN','Washington, TN','Sullivan, TN','Carter, TN','Johnson, TN','Unicoi, TN','Hawkins, TN','Hancock, TN','Scott, TN','Morgan, TN','Cumberland, TN','Bledsoe, TN','Rhea, TN','Meigs, TN','Polk, TN','Sequatchie, TN','Marion, TN','Buncombe, NC','Haywood, NC','Henderson, NC','Madison, NC','Yancey, NC','Mitchell, NC','Avery, NC','Watauga, NC','Ashe, NC','Alleghany, NC','Wilkes, NC','Caldwell, NC','Burke, NC','McDowell, NC','Rutherford, NC','Polk, NC','Transylvania, NC','Jackson, NC','Swain, NC','Macon, NC','Graham, NC','Clay, NC','Cherokee, NC'],
     'category_priorities': {},
 }
-OPERATIONAL = {'cyber','infrastructure','grid','fuel','communications','transportation','supply-chain','public-health','public-safety','emergency','chatter','top-news','civil-unrest','regional','radiological'}
+OPERATIONAL = {'cyber','infrastructure','grid','fuel','commodity','communications','transportation','supply-chain','public-health','public-safety','emergency','chatter','top-news','civil-unrest','civil-liberties','politics','regional','radiological','fire-weather'}
 LIFE_SAFETY = {'Tornado Warning','Flash Flood Warning','Civil Emergency Message','Evacuation Immediate','Shelter In Place Warning','Extreme Wind Warning','Tsunami Warning'}
+FIRE_WEATHER = {'Red Flag Warning', 'Fire Weather Watch'}
 
 
 def timestamp(value):
@@ -65,7 +66,7 @@ def geography(row, meta, policy):
     # Affected area, never issuing weather office, determines local relevance.
     area=row['location'] or meta['properties'].get('areaDesc','') or meta['raw'].get('_area','')
     area=area.replace(' (County)','')
-    text=area if meta['category']=='weather' else area+' '+row['title']
+    text=area if meta['category'] in {'weather','fire-weather'} else area+' '+row['title']
     if any(re.search(r'(?<!\w)'+re.escape(t)+r'(?!\w)',text,re.I) for t in policy['local_terms']+policy['local_counties']):
         return 'ETN/WNC',30
     states=policy['regional_states']
@@ -77,7 +78,7 @@ def geography(row, meta, policy):
         lon,lat=coords[:2]
         if -90<=lon<=-75 and 30<=lat<=39: return 'REGIONAL',20
         if -125<=lon<=-66 and 24<=lat<=50: return 'NATIONAL',12
-    if meta['category']=='weather': return 'DISTANT',0
+    if meta['category'] in {'weather','fire-weather'}: return 'DISTANT',0
     if meta['raw'].get('_area')=='NATIONAL' or re.search(r'\b(United States|USA|Alaska|Hawaii)\b',text): return 'NATIONAL',12
     if meta['category']=='space-weather': return 'NATIONAL',12
     return 'GLOBAL',0
@@ -110,7 +111,7 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
     published=meta['published']; hours=(now-published).total_seconds()/3600 if published else float('inf')
     impact={'unknown':0,'minor':3,'moderate':10,'severe':20,'extreme':30}.get(row['severity'],0)
     text=(row['title']+' '+row['body']).lower()
-    operational_pattern=r'\b(outage|disruption|closure|closed|evacuation|exploited|exploitation|ransomware|shutdown|shortage|outbreak|emergency declaration|fire|explosion|crash|collision|shooting|stabbing|missing person|hazmat|hazardous materials|boil water|water main|power line|brush fire|wildfire|rescue|fatal|deadly|bridge|road|interstate|shelter|hospital|school lockdown)\b'
+    operational_pattern=r'\b(outage|disruption|closure|closed|evacuation|exploited|exploitation|ransomware|shutdown|shortage|outbreak|emergency declaration|fire|explosion|crash|collision|shooting|stabbing|missing person|hazmat|hazardous materials|boil water|water main|power line|brush fire|wildfire|rescue|fatal|deadly|bridge|road|interstate|shelter|hospital|school lockdown|warrantless|surveillance|privacy breach|press freedom|polling place closure|election disruption|voting access|protest rights)\b'
     consequential=bool(re.search(operational_pattern,text))
     if cat=='cyber' and row['source_family']=='cisa' and 'cveID' not in raw:
         # Advisory templates often say there is NO known public exploitation.
@@ -125,7 +126,7 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
     reason=''; lane='context' if cat=='top-news' else 'inbox'; expired=bool(meta['expires'] and meta['expires']<=now)
     if timestamp(raw.get('_superseded_at')) and timestamp(raw['_superseded_at'])<=now: expired=True
     if raw.get('status') in {'resolved','postmortem'} or raw.get('_snapshot_active') is False: expired=True
-    if cat=='weather':
+    if cat in {'weather','fire-weather'}:
         lane='now'
         vtec=' '.join(p.get('parameters',{}).get('VTEC',[]))
         if p.get('messageType')=='Cancel' or '/O.CAN.' in vtec or '/O.EXP.' in vtec: expired=True
@@ -133,8 +134,11 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
         elif not meta['expires']: reason='No verified weather expiration'
         elif meta['onset'] and meta['onset']>now: reason='Not yet active'
         elif p.get('status','Actual')!='Actual': reason='Test/exercise weather bulletin'
-        elif meta['event'] not in LIFE_SAFETY: reason='Routine weather; explicit broad NOW view only'
+        elif meta['event'] not in LIFE_SAFETY | FIRE_WEATHER: reason='Routine weather; explicit broad NOW view only'
         elif area!='ETN/WNC': reason='Outside primary local weather area'
+        elif cat == 'fire-weather':
+            parts['impact'] = max(parts['impact'], 20 if meta['event']=='Red Flag Warning' else 10)
+            parts['category'] = 15
     elif cat=='earthquake':
         mag=p.get('mag',0) or 0; sig=p.get('sig',0) or 0; felt=p.get('felt',0) or 0
         exceptional=mag>=policy['global_quake_magnitude'] or p.get('alert') in {'orange','red'}
@@ -150,7 +154,7 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
     elif row['source_family']=='gdacs':
         if not row['title'].lower().startswith('red '): reason='Non-exceptional global disaster notice'
         else: parts['impact']=30
-    elif cat == 'fuel':
+    elif cat in {'fuel','commodity'}:
         fuel_signal = r'\b(?:gas(?:oline)?|diesel|oil|fuel|crude|barrel)\b.{0,80}\b(?:price|cost|rise|surge|spike|increase|record|shortage|supply|disruption|shipping)\b|\b(?:price|cost|record|shortage|supply|disruption)\b.{0,80}\b(?:gas(?:oline)?|diesel|oil|fuel|crude|barrel)\b'
         if not re.search(fuel_signal, text, re.I): reason='No clear fuel-price or supply-impact signal'
         else: parts['impact']=20
@@ -173,7 +177,10 @@ def evaluate(row, policy=None, now=None, confidence_score=75, families=1):
         # words such as “shelter.” Require the actual headline to carry the
         # event signal before it enters the operator inbox.
         chatter_pattern=r'\b(outage|disruption|closure|closed|evacuation|shortage|outbreak|emergency declaration|fire|explosion|crash|collision|shooting|stabbing|missing person|hazmat|hazardous materials|boil water|water main|power line|brush fire|wildfire|fatal|deadly|lockdown|shelter in place)\b'
-        if not re.search(chatter_pattern,row['title'],re.I): reason='No concrete event signal in the community headline'
+        seasonal_pattern=r'\b(leaf season|fall color|autumn color|park conditions?|visitor access|visitation|tourism impact|trail closure|park road closure|campground closure)\b'
+        if re.search(seasonal_pattern, text, re.I) and area in {'ETN/WNC','REGIONAL'}:
+            parts['impact'] = max(parts['impact'], 10)
+        elif not re.search(chatter_pattern,row['title'],re.I): reason='No concrete event signal in the community headline'
     elif cat == 'civil-unrest':
         if not re.search(r'\b(protest|riot|clash|riot|unrest|demonstration|strike|violence|civilian|killed|fatalit)', text, re.I):
             reason='No civil-unrest event signal'
@@ -202,8 +209,12 @@ def assess(claim, rows, policy=None, now=None):
     active=[x for x in items if not x[0]['reason']]
     chosen,row=max(active or items,key=lambda x:(not x[0]['expired'],x[0]['score'],x[0]['published']))
     result=dict(claim);result.update(chosen)
+    observed = [timestamp(item['observed_at']) for item in rows if timestamp(item['observed_at'])]
+    window_seconds = int((max(observed)-min(observed)).total_seconds()) if len(observed) > 1 else 0
+    chatter_window = '<1h' if window_seconds < 3600 else f'{window_seconds//3600}h' if window_seconds < 86400 else f'{window_seconds//86400}d'
     result.update(title=row['title'],location=row['location'],confidence_label=label,confidence_score=conf,
                   independent_families=families,official_families=official,confidence_explanation=explanation,
-                  significance_score=chosen['score'])
+                  significance_score=chosen['score'], chatter_mentions=len(rows),
+                  chatter_sources=len({item['source_id'] for item in rows}), chatter_window=chatter_window)
     if all(x[0]['expired'] for x in items) and result['status'] not in {'SENT','REJECTED'}: result['status']='EXPIRED'
     return result

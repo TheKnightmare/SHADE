@@ -49,7 +49,12 @@ def traffic_message(
     title = compact(claim["title"]).upper()
     sources = len({row["source_family"] for row in observations})
     official = len({row["source_family"] for row in observations if row["source_type"] == "official"})
-    suffix = f" SRC-FAMILIES:{sources} OFFICIAL:{official} REVIEWED-BY:{callsign}"
+    lead = next((row for row in observations if row.get('display_role') == 'lead'), observations[0] if observations else None)
+    attribution = f" LEAD:{lead['source_family']}" if lead else ''
+    support_count = sum(1 for row in observations if row is not lead)
+    if support_count:
+        attribution += f' SUPPORT:{support_count}'
+    suffix = f" SRC-FAMILIES:{sources} OFFICIAL:{official}{attribution} REVIEWED-BY:{callsign}"
     if mode == "exercise":
         prefix = f"@{network} EXERCISE/EMCOMM {label}/{location} - "
         suffix += " EXERCISE"
@@ -96,6 +101,9 @@ def bulletin_messages(items, *, callsign, network, max_chars=500, mode='standard
         tagged = bulletin_basis_tag(claim, observations)+' '+traffic_message(claim, observations, callsign=callsign,
             network=network, max_chars=max_chars, mode=mode, region_label=region_label)
         bodies.extend(split_message(tagged, max_chars))
+        for footnote, row in enumerate((row for row in observations if row.get('display_role') == 'supporting'), 1):
+            detail = f"(F{footnote}) SUPPORT [{row['source_type']}/{row['source_family']}] {row['source_name']}: {row['url']}"
+            bodies.extend(split_message(detail, max_chars))
     total = 1 + len(bodies)
     # Re-split once using the final numbering overhead so every transmitted
     # line, including the header, remains within the operator limit.
@@ -118,9 +126,11 @@ def evidence_summary(claim, observations):
            f"EVENT: {claim['event']} | URGENCY: {claim['urgency']} | CERTAINTY: {claim['certainty']}",
            'SIGNIFICANCE: '+str(claim['score'])+' = '+json.dumps(claim['breakdown'],sort_keys=True),
            'CONFIDENCE: '+claim['confidence_explanation'],
+           f"CHATTER: {claim['chatter_mentions']} mentions, {claim['chatter_sources']} sources, {claim['chatter_window']}",
            'VISIBILITY: '+(claim['reason'] or claim['lane'])]
     for row in observations:
-        lines.append(f"- [{row['source_type']}/{row['source_family']}] {row['source_name']}: {row['url']} (published {row['published_at']}; observed {row['observed_at']})")
+        marker = 'LEAD' if row.get('display_role') == 'lead' else 'FOOTNOTE'
+        lines.append(f"- {marker} [{row['source_type']}/{row['source_family']}] {row['source_name']}: {row['url']} (published {row['published_at']}; observed {row['observed_at']})")
     targets=ALLOWED_TRANSITIONS.get(claim['status'],set())
     lines.append('NEXT: '+('; '.join(f"shade mark {claim['id']} {t.lower()}" for t in sorted(targets)) or 'terminal state; evidence retained'))
     if claim['status']=='REVIEW' and not any(row['source_type'] in {'official','media'} for row in observations):

@@ -1,6 +1,6 @@
 # Copy to config.local.toml only if that file does not exist; merge otherwise.
 [source_packs]
-enabled = ["cyber", "communications", "energy", "regional", "transportation", "local-official", "local-community", "top-news"]
+enabled = ["cyber", "communications", "energy", "regional", "transportation", "civil-liberties", "local-official", "local-community", "top-news"]
 
 # Keyword-driven Google News RSS search. Set keyword_tier to local, regional,
 # national, or global; or provide query_terms for a single explicit term.

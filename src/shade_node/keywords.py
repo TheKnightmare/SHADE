@@ -3,7 +3,7 @@ from pathlib import Path
 import tomllib
 import re
 
-TIERS = ("local", "regional", "national", "global")
+TIERS = ("local", "regional", "national", "global", "civil-liberties", "politics")
 
 def normalize_keywords(payload: dict) -> dict[str, list[str]]:
     result = {}

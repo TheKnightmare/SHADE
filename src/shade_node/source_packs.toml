@@ -35,24 +35,38 @@ pack = "communications"
 min_poll_seconds = 900
 
 [[sources]]
-id = "eia-energy"
-kind = "rss"
-name = "EIA Today in Energy"
-url = "https://www.eia.gov/rss/todayinenergy.xml"
+id = "eia-retail-prices"
+kind = "eia_prices"
+name = "EIA Weekly Gasoline and Diesel Prices"
+url = "https://api.eia.gov/v2/petroleum/pri/gnd/data/?frequency=weekly&data[0]=value&facets[series][]=EMM_EPMRR_PTE_NUS_DPG&facets[series][]=EMM_EPMRR_PTE_R10_DPG&facets[series][]=EMM_EPMRR_PTE_R20_DPG&facets[series][]=EMM_EPMRR_PTE_R30_DPG&facets[series][]=EMD_EPD2DXL0_PTE_NUS_DPG&facets[series][]=EMD_EPD2DXL0_PTE_R10_DPG&facets[series][]=EMD_EPD2DXL0_PTE_R20_DPG&facets[series][]=EMD_EPD2DXL0_PTE_R30_DPG&sort[0][column]=period&sort[0][direction]=desc&length=32"
 source_type = "official"
 source_family = "eia"
-category = "fuel"
+category = "commodity"
 area = "NATIONAL"
 pack = "energy"
-min_poll_seconds = 3600
+api_key_env = "EIA_API_KEY"
+min_poll_seconds = 604800
+
+[[sources]]
+id = "eia-crude-spot"
+kind = "eia_prices"
+name = "EIA WTI and Brent Crude Spot Prices"
+url = "https://api.eia.gov/v2/petroleum/pri/spt/data/?frequency=daily&data[0]=value&facets[series][]=RWTC&facets[series][]=RBRTE&sort[0][column]=period&sort[0][direction]=desc&length=14"
+source_type = "official"
+source_family = "eia"
+category = "commodity"
+area = "NATIONAL"
+pack = "energy"
+api_key_env = "EIA_API_KEY"
+min_poll_seconds = 86400
 
 [[sources]]
 id = "fema-regional"
-kind = "fema_declarations"
-name = "OpenFEMA Regional Disaster Declarations"
-url = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=state%20eq%20%27TN%27%20or%20state%20eq%20%27NC%27%20or%20state%20eq%20%27KY%27%20or%20state%20eq%20%27GA%27&$orderby=declarationDate%20desc&$top=100"
+kind = "fema_disaster_declarations"
+name = "OpenFEMA Region 4 Disaster Declarations"
+url = "https://www.fema.gov/api/open/v1/DisasterDeclarationsSummaries?$filter=state%20eq%20%27AL%27%20or%20state%20eq%20%27FL%27%20or%20state%20eq%20%27GA%27%20or%20state%20eq%20%27KY%27%20or%20state%20eq%20%27MS%27%20or%20state%20eq%20%27NC%27%20or%20state%20eq%20%27SC%27%20or%20state%20eq%20%27TN%27&$orderby=declarationDate%20desc&$top=100"
 source_type = "official"
-source_family = "fema"
+source_family = "fema-disaster-decl"
 category = "public-safety"
 pack = "regional"
 min_poll_seconds = 3600
@@ -91,6 +105,18 @@ source_type = "official"
 source_family = "usgs"
 category = "earthquake"
 pack = "regional"
+min_poll_seconds = 3600
+
+[[sources]]
+id = "eff-updates"
+kind = "rss"
+name = "Electronic Frontier Foundation Updates"
+url = "https://www.eff.org/rss/updates.xml"
+source_type = "media"
+source_family = "eff"
+category = "civil-liberties"
+area = "NATIONAL"
+pack = "civil-liberties"
 min_poll_seconds = 3600
 
 [[sources]]

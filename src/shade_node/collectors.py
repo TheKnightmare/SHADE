@@ -78,6 +78,8 @@ def parse_nws(source: SourceConfig, data: bytes) -> list[Observation]:
     for feature in payload.get("features", []):
         props = feature.get("properties", {})
         external_id = props.get("id") or feature.get("id") or props.get("@id") or props.get("sent") or props.get("headline")
+        event = props.get("event") or ""
+        category = "fire-weather" if event in {"Red Flag Warning", "Fire Weather Watch"} else "weather"
         observations.append(
             Observation(
                 source_id=source.id,
@@ -88,7 +90,7 @@ def parse_nws(source: SourceConfig, data: bytes) -> list[Observation]:
                 title=props.get("headline") or props.get("event") or "NWS alert",
                 body=props.get("description") or props.get("instruction") or "",
                 url=props.get("@id") or feature.get("id") or source.url,
-                category="weather",
+                category=category,
                 location=props.get("areaDesc") or "",
                 severity=(props.get("severity") or "unknown").lower(),
                 published_at=iso_utc(props.get("sent") or props.get("effective")) if timestamp(props.get("sent") or props.get("effective")) else "",
@@ -271,6 +273,32 @@ def parse_faa(source, data):
                           reason+' Average delay: '+average,source.url,category='transportation',
                           location=places.get(airport,'United States: '+airport),severity='severe' if severe else 'minor',
                           published_at='',raw=raw))
+    return result
+
+
+def parse_eia_prices(source, data):
+    payload = _json(data)
+    rows = payload.get('response', {}).get('data', []) if isinstance(payload, dict) else []
+    if not isinstance(rows, list):
+        raise CollectionError('Invalid EIA API schema')
+    result = []
+    for item in rows:
+        series = str(item.get('series') or item.get('seriesId') or item.get('product') or '')
+        period = str(item.get('period') or '')
+        value = item.get('value')
+        if not series or not period or value in (None, ''):
+            continue
+        description = item.get('series-description') or item.get('seriesDescription') or series
+        units = item.get('units') or 'dollars per gallon'
+        padd = {'R10':'East Coast / PADD 1', 'R20':'Midwest / PADD 2', 'R30':'Gulf Coast / PADD 3'}
+        area = item.get('area-name') or item.get('area') or next((name for code,name in padd.items() if code in series), 'United States')
+        result.append(Observation(
+            source.id, source.name, 'official', 'eia', f'{series}|{period}',
+            f'EIA {description}: {value} {units}',
+            f'Official EIA commodity price for {period}: {value} {units}.', source.url,
+            category='commodity', location=area, severity='moderate', published_at=period,
+            raw={**item, '_area': 'REGIONAL' if any(code in series for code in padd) else 'NATIONAL', '_commodity_price': True},
+        ))
     return result
 
 
@@ -589,6 +617,8 @@ PARSERS = {
     "rss": parse_rss,
     "cisa_kev": parse_kev,
     "fema_declarations": parse_fema,
+    "fema_disaster_declarations": parse_fema,
+    "eia_prices": parse_eia_prices,
     "faa_status": parse_faa,
     "status_api": parse_status,
     "tdot_events": parse_tdot,
@@ -611,11 +641,13 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
     if not parser:
         raise CollectionError(f"unknown collector kind: {source.kind}")
     headers = {}
+    key = ''
     if source.api_key_env:
         key = os.environ.get(source.api_key_env, '')
         if not key:
             raise CollectionError(f"missing credential environment variable: {source.api_key_env}")
-        headers['Authorization'] = f'Bearer {key}'
+        if source.kind != 'eia_prices':
+            headers['Authorization'] = f'Bearer {key}'
     if source.kind == 'mastodon_hashtag':
         return _collect_mastodon(source, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes)
     if source.kind == 'wzdx_registry':
@@ -642,6 +674,10 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
             observations.extend(parse_rss(source, fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)))
         return observations
     url = source.url
+    if source.kind == 'eia_prices':
+        parsed = urlparse(url); query = parse_qs(parsed.query)
+        query['api_key'] = [key]
+        url = urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
     if source.kind == 'usgs_waterservices':
         query = {'format': 'json', 'sites': ','.join(source.sites), 'parameterCd': ','.join(source.parameters)}
         parsed = urlparse(url); current = parse_qs(parsed.query); current.update({k: [v] for k, v in query.items()})
