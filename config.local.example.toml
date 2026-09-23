@@ -57,6 +57,41 @@ enabled = false
 min_poll_seconds = 1800
 trusted_for_relay = true
 
+[[sources]]
+id = "telegram-s2-underground-project"
+kind = "telegram_preview"
+name = "S2 Underground Project Telegram"
+url = "https://t.me/s/s2_underground_project"
+source_type = "community"
+source_family = "s2-underground-project"
+category = "chatter"
+enabled = false
+min_poll_seconds = 1800
+trusted_for_relay = true
+
+[[sources]]
+id = "s2-ghostmaps"
+kind = "rss"
+name = "S2 GhostMaps GitHub activity"
+url = "https://github.com/s2underground/GhostMaps/commits/main.atom"
+source_type = "community"
+source_family = "s2-ghostmaps"
+category = "chatter"
+enabled = false
+min_poll_seconds = 3600
+
+[[sources]]
+id = "s2-podcast"
+kind = "rss"
+name = "S2 Underground podcast"
+url = "https://feeds.buzzsprout.com/868255.rss"
+source_type = "media"
+source_family = "s2-podcast"
+category = "top-news"
+area = "NATIONAL"
+enabled = false
+min_poll_seconds = 3600
+
 # ACLED US Crisis Monitor (requires an operator-provided key).
 [[sources]]
 id = "acled-us"

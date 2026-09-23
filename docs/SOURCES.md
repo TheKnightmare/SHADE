@@ -108,3 +108,4 @@ The operator may designate a named superior relay such as S2 Underground Wire
 with `trusted_for_relay = true`. SHADE preserves that source's family and text
 attribution and labels the claim `TRUSTED-RELAY`; it does not relabel the source
 as official or silently merge it with another family.
+The full S2 watcher map is documented in [S2_WATCHER.md](S2_WATCHER.md).
