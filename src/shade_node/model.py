@@ -92,10 +92,13 @@ class SourceConfig:
     min_poll_seconds: int = 900
     api_key_env: str = ""
     max_posts_per_poll: int = 100
+    max_requests_per_poll: int = 12
     high_credibility: bool = False
     sites: list[str] = field(default_factory=list)
     parameters: list[str] = field(default_factory=lambda: ['00060', '00065'])
     threshold: float | None = None
+    forms_dir: str = ''  # node_js8_forms: JS8Spotter MCForms folder
+    home_grid: str = ''  # node_js8_forms: station Maidenhead locator for distance-based area
     instance: str = ''
     hashtag: str = ''
     keyword_tier: str = ''
@@ -103,10 +106,25 @@ class SourceConfig:
     keywords: dict[str, list[str]] = field(default_factory=dict, repr=False)
     park_codes: list[str] = field(default_factory=list)
     region_terms: list[str] = field(default_factory=list)
+    origin_families: dict[str, str] = field(default_factory=dict, repr=False)
 
     def __post_init__(self):
         from urllib.parse import urlsplit
         parsed=urlsplit(self.url)
+        if self.kind == 'commstat_db':
+            # CommStat's local traffic.db3 (path, or empty to auto-discover); read-only, no network.
+            if '://' in self.url.replace('file://', ''):
+                raise ValueError('commstat_db needs a local path to CommStat or its traffic.db3')
+            if not self.source_family.strip(): raise ValueError('Every source needs an originating family')
+            if self.source_type not in {'official','community','media'}: raise ValueError('Invalid source type')
+            return
+        if self.kind == 'node_js8_forms':
+            # Local, read-only NODE log folder (a path, not a URL); no network.
+            if not self.url.strip() or '://' in self.url.replace('file://', ''):
+                raise ValueError('node_js8_forms needs a local NODE log folder path')
+            if not self.source_family.strip(): raise ValueError('Every source needs an originating family')
+            if self.source_type not in {'official','community','media'}: raise ValueError('Invalid source type')
+            return
         if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError('Sources require HTTPS URLs without embedded credentials')
         if self.kind == 'mastodon_hashtag' and not self.source_family.strip():
@@ -116,3 +134,6 @@ class SourceConfig:
         if not self.source_family.strip(): raise ValueError('Every source needs an originating family')
         if self.source_type not in {'official','community','media'}: raise ValueError('Invalid source type')
         if self.min_poll_seconds < 60: raise ValueError('Source polling interval must be at least 60 seconds')
+        if self.max_requests_per_poll < 1: raise ValueError('Source request ceiling must be positive')
+        if self.kind == 'wzdx_registry' and self.max_requests_per_poll < 2:
+            raise ValueError('WZDx needs room for the registry and one child-feed request')

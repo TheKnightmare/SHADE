@@ -56,8 +56,8 @@ The private local configuration adds RSS/Atom feeds from WATE, WBIR, WVLT, WJHL,
 Blue Ridge Public Radio, Mountain Xpress, Tennessee Lookout, and
 North Carolina Health News, plus operator-approved community sources. These
 are intentionally treated as media or community discovery sources. A local
-headline can surface a consequential event, but it does not become confirmed
-unless an official source or an independent originating family corroborates it.
+headline can surface a consequential event. CONFIRMED attribution requires
+an official source and another independent originating family.
 The former WCYB and WLOS feed URLs returned 404 on 2026-09-22 and are retained
 disabled as manual-watch sources rather than replaced with invented or
 unofficial feeds. Reddit's public RSS endpoints repeatedly returned HTTP 429,
@@ -105,11 +105,11 @@ the configured environment variable (`ACLED_API_KEY` in the example) and never
 place credentials in a TOML file. ACLED observations are normalized as
 `civil-unrest` events with event date, location, actors, notes, and fatalities.
 
-Community corroboration does not become transmit-eligible merely because more
-community families repeat it. Fast-moving unrest channels frequently mirror one
-another, so repeated community claims can be one rumor propagating. A claim
-requires at least one official or media family before it may advance to
-`TX_CANDIDATE`; ACLED counts as official.
+Community reports alone do not clear the normal TX_CANDIDATE workflow
+gate, even when several families repeat a claim. That gate requires any one
+official or media observation; ACLED counts as official. Separately, the
+CORROBORATED confidence label requires two distinct media families. These are
+different thresholds for workflow eligibility and attribution.
 
 The operator may designate any source with `high_credibility = true`. SHADE
 preserves that source's family and attribution and labels its otherwise
@@ -119,7 +119,8 @@ After reviewing a community-only claim, an operator may explicitly run
 `shade relay <id>` to create `TX_CANDIDATE (operator relay)`. The action is
 source-agnostic and written to the workflow audit log. Normal
 `shade mark <id> tx_candidate` still requires official or media evidence and
-records `TX_CANDIDATE (corroborated)`.
+records `TX_CANDIDATE (corroborated)` as a workflow basis. The
+CORROBORATED confidence label separately requires two media families.
 The full S2 watcher map is documented in [S2_WATCHER.md](S2_WATCHER.md).
 
 ## Water and radiological monitoring
@@ -132,7 +133,12 @@ the normal significance through the existing severity/scoring path.
 `epa_radnet` uses EPA's documented near-real-time CSV downloads. RadNet
 stations provide official background and exposure monitoring; EPA notes that
 elevated readings are reviewed by trained scientists. `safecast` uses the
-public, keyless volunteer-sensor API and remains community evidence. A single
+public, keyless volunteer-sensor API and remains community evidence. The local
+source queries Safecast server-side within 300 km (300,000 meters) of Knoxville
+(35.96, -83.92), covering East Tennessee and western North Carolina. The
+collector verifies returned coordinates against that circle and discards missing
+or out-of-range points before marking a reading ETN/WNC. The broad radius
+includes nearby border areas; a reading still carries its actual coordinates. A single
 Safecast reading crossing a threshold is not sufficient: sensor drift and
 hardware faults are real failure modes. Treat it seriously only when a RadNet
 station agrees or multiple independent Safecast sensors agree. This is a
@@ -148,6 +154,16 @@ partial by design: federation does not provide a universal firehose, and this
 is not a bug to work around. SHADE persists one cooldown budget per instance;
 hashtags on the same instance are polled one at a time, oldest first. Telegram
 previews use one shared global budget in the same manner.
+
+## Request ceilings and conditional feeds
+
+Set max_requests_per_poll on a source to cap total upstream calls per run
+(default 12). Mastodon counts pages across all hashtags, Google News counts
+term queries, and WZDx counts the registry request plus child feeds. WZDx
+partial child-feed failures retain successfully parsed observations and record
+the failed feed URLs in source health. Plain RSS feeds remember ETag and
+Last-Modified validators and use conditional requests on subsequent polls;
+an HTTP 304 preserves the existing observations without downloading the feed.
 
 ## IRC
 
@@ -168,11 +184,10 @@ national and global terms remain keyword-only. `google_news_search` can query a
 whole tier or an explicit per-source term list. Matching remains exact/simple;
 SHADE does not generate, expand, or fuzzy-match keywords.
 
-Civil-liberties and politics items use the same national-impact rule as other
-national categories: a concrete operational effect is required, and routine
-commentary remains suppressed. Local media coverage of leaf season, park access,
-trail/road closures, and tourism-impact conditions has an explicit carve-out from
-the routine-newsletter suppression rule.
+Civil-liberties and politics items receive geography and severity points like
+other operational categories. Area and score rank reports but never hide NEW or
+REVIEW claims. Only narrow routine newsletters and announcements are
+automatically hidden or eligible for housekeeping suppression.
 
 ## Claim correlation display
 
@@ -217,8 +232,17 @@ keys are supplied through `api_key_env`; credentials are never stored in TOML.
 
 WZDx is primarily planned work-zone data. Emergency and disaster-driven closure
 coverage varies by state and is not guaranteed. This collector supplements,
-rather than replaces, state incident feeds such as TDOT SmartWay and NCDOT TIMS.
+rather than replaces, state incident feeds such as TDOT SmartWay.
 The draft national registry in `chokepoints.toml` is deliberately unverified;
 confirm entries against the FHWA National Bridge Inventory or the responsible
-state DOT before treating them as final. Chokepoint matches use the existing
-relevance boost path and do not introduce a new score.
+state DOT before treating them as final. The registry loads beside the main config at startup. TDOT SmartWay incidents
+match a configured name or alias, or an I-40 route together with Cocke County
+or a verified Pigeon River Gorge mile marker (446–451). USGS water readings
+match only explicitly configured site numbers; every current `watch_usgs_sites`
+list is empty, so gauge-based chokepoint matching is incomplete until an
+operator supplies confirmed site IDs. Each match records its ID and reason in
+the observation evidence, and adds 10 points through the existing
+`operator_priority` score dimension. These draft matches flag operator review;
+they do not confirm a closure. NCDOT TIMS appears as a coverage pointer in
+this registry, but SHADE has no NCDOT TIMS collector and currently has no
+NC-side official incident monitoring.

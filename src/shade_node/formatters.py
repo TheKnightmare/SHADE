@@ -12,11 +12,56 @@ def compact(text: str) -> str:
     return text
 
 
+# Radio copy is plain text.  Remove emoji code points and their joiner/
+# presentation machinery before applying the message length limit.  The
+# keycap sequence is matched first and reduced to its plain digit, #, or *.
+_KEYCAP_EMOJI = re.compile(r"[0-9#*]\ufe0f?\u20e3")
+_EMOJI_SINGLETONS = {
+    0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139, 0x2328, 0x23CF,
+    0x24C2, 0x25B6, 0x25C0, 0x2934, 0x2935, 0x3030, 0x303D, 0x3297, 0x3299,
+}
+_EMOJI_RANGES = (
+    (0x2194, 0x21AA), (0x231A, 0x231B), (0x23E9, 0x23F3),
+    (0x23F8, 0x23FA), (0x25AA, 0x25AB), (0x25FB, 0x25FE),
+    (0x2600, 0x27BF), (0x2B05, 0x2B55), (0x1F000, 0x1FAFF),
+    (0xE0020, 0xE007F),
+)
+_EMOJI_PARTS = {0x200D, 0x20E3, 0xFE0E, 0xFE0F}
+
+
+def _emoji_codepoint(character: str) -> bool:
+    codepoint = ord(character)
+    return (codepoint in _EMOJI_PARTS or codepoint in _EMOJI_SINGLETONS
+            or any(start <= codepoint <= end for start, end in _EMOJI_RANGES))
+
+
+def strip_emoji(text: str) -> str:
+    """Remove radio-incompatible emoji while preserving surrounding copy."""
+    without_keycaps = _KEYCAP_EMOJI.sub(lambda match: match.group()[0], text)
+    cleaned = "".join(char for char in without_keycaps if not _emoji_codepoint(char))
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def workflow_status(claim) -> str:
     status = claim['status']
+    # Operator disposition vocabulary is intentionally simpler than stored
+    # lifecycle mechanics. Preserve the raw status/reason in DB and audit;
+    # this is presentation-only and never mutates either record.
+    if status in {'REJECTED', 'EXPIRED'}:
+        return 'REJECT'
     if status == 'TX_CANDIDATE':
         basis = (claim.get('tx_candidate_basis') if isinstance(claim, dict) else claim['tx_candidate_basis']) or 'basis missing'
         return f"TX_CANDIDATE ({basis.replace('_', ' ')})"
+    if status == 'SENT':
+        # Transmission logging (wire_transmissions/record_wire_transmission)
+        # was added after some SENT claims already existed - those are valid
+        # historical evidence, not a data-quality problem, so this never
+        # infers or backfills a channel/message; it only distinguishes two
+        # real, different situations for the operator.
+        if claim.get('wire_transmissions'):
+            return 'SENT — transmission details available'
+        return 'SENT — no transmission record; predates recording'
     return status
 
 
@@ -44,29 +89,24 @@ def traffic_message(
     mode = mode.lower()
     if mode not in {"standard", "exercise", "actual"}:
         raise ValueError(f"unknown operating mode: {mode}")
-    label = claim["confidence_label"]
-    location = compact(claim["location"] or region_label or "LOCATION-NOT-STATED").upper()
-    title = compact(claim["title"]).upper()
-    sources = len({row["source_family"] for row in observations})
-    official = len({row["source_family"] for row in observations if row["source_type"] == "official"})
-    lead = next((row for row in observations if row.get('display_role') == 'lead'), observations[0] if observations else None)
-    attribution = f" LEAD:{lead['source_family']}" if lead else ''
-    support_count = sum(1 for row in observations if row is not lead)
-    if support_count:
-        attribution += f' SUPPORT:{support_count}'
-    suffix = f" SRC-FAMILIES:{sources} OFFICIAL:{official}{attribution} REVIEWED-BY:{callsign}"
+    label = strip_emoji(claim["confidence_label"])
+    # A station's home-region label does not locate every regional story.
+    area = claim.get('area', '') if isinstance(claim, dict) else claim['area']
+    location = strip_emoji(compact(claim["location"] or (region_label if area == 'ETN/WNC' else area) or "LOCATION-NOT-STATED")).upper()
+    title = strip_emoji(compact(claim["title"])).upper()
+    suffix = ''
     if mode == "exercise":
-        prefix = f"@{network} EXERCISE/EMCOMM {label}/{location} - "
+        prefix = f"@{strip_emoji(network)} EXERCISE/EMCOMM {label}/{location} - "
         suffix += " EXERCISE"
     elif mode == "actual":
-        prefix = f"@{network} ACTUAL/EMCOMM {label}/{location} - "
+        prefix = f"@{strip_emoji(network)} ACTUAL/EMCOMM {label}/{location} - "
     else:
-        prefix = f"@{network} {label}/{location} - "
+        prefix = f"@{strip_emoji(network)} {label}/{location} - "
     room = max_chars - len(prefix) - len(suffix)
-    if room < 20: raise ValueError("Message limit too small for mandatory attribution and mode markings")
+    if room < 20: raise ValueError("Message limit too small for the report and mode markings")
     if len(title) > room:
         title = title[: room - 3].rstrip() + "..."
-    return prefix + title + suffix
+    return strip_emoji(prefix + title + suffix)
 
 
 # Compatibility for integrations written against the 0.1 formatter API.
@@ -128,6 +168,8 @@ def evidence_summary(claim, observations):
            'CONFIDENCE: '+claim['confidence_explanation'],
            f"CHATTER: {claim['chatter_mentions']} mentions, {claim['chatter_sources']} sources, {claim['chatter_window']}",
            'VISIBILITY: '+(claim['reason'] or claim['lane'])]
+    for wire in claim.get('wire_transmissions', []):
+        lines.append(f"WIRE TX: {wire['sent_at']} on {wire['channel']} • {wire['message_text']}")
     for row in observations:
         marker = 'LEAD' if row.get('display_role') == 'lead' else 'FOOTNOTE'
         lines.append(f"- {marker} [{row['source_type']}/{row['source_family']}] {row['source_name']}: {row['url']} (published {row['published_at']}; observed {row['observed_at']})")

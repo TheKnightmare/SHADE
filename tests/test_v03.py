@@ -53,7 +53,7 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(len(self.visible(item,'now')),1)
 
     def test_routine_and_distant_weather_hidden(self):
-        for o in [weather('Special Weather Statement'),weather('Dense Fog Advisory'),weather(location='Fulton, GA')]:
+        for o in [weather('Special Weather Statement'),weather('Dense Fog Advisory')]:
             self.assertEqual(self.visible(o,'now'),[])
             self.assertEqual(self.visible(o),[])
             self.assertEqual(len(self.visible(o,'now',include_suppressed=True)),1)
@@ -65,9 +65,10 @@ class AcceptanceTests(unittest.TestCase):
     def test_ends_precedes_expires(self):
         self.assertEqual(self.visible(weather(ends='2026-09-22T02:30:00Z'),'now'),[])
 
-    def test_remote_moderate_quakes_suppressed(self):
-        self.assertEqual(self.visible(quake()),[])
-        self.assertEqual(self.visible(quake(6.5,(-171,52),tsunami=1)),[])
+    def test_remote_quakes_use_same_magnitude_gate_as_local(self):
+        self.assertEqual(len(self.visible(quake())),1)
+        self.assertEqual(len(self.visible(quake(6.5,(-171,52),tsunami=1))),1)
+        self.assertEqual(self.visible(quake(2.0)),[])
 
     def test_regional_and_exceptional_quakes(self):
         for o in [quake(4.0,(-84,36)),quake(8.0),quake(6.8,(-120,38),felt=1000)]:
@@ -90,14 +91,15 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_affected_area_not_issuing_office(self):
         o=weather(location='Wake, NC');o.title='Tornado Warning by NWS Knoxville TN'
-        self.assertEqual(self.visible(o,'now'),[])
+        self.assertEqual(self.visible(o,'now')[0]['area'],'REGIONAL')
+        self.assertLess(self.visible(o,'now')[0]['score'],self.visible(weather(),'now')[0]['score'])
 
     def test_operator_policy_and_filters(self):
         self.assertEqual(self.visible(obs(),category='cyber'),[])
         self.assertEqual(self.visible(obs(),max_age=.5),[])
         self.assertEqual(self.visible(obs(),area='GLOBAL'),[])
-        self.assertEqual(self.visible(obs(),policy={'minimum_score':100}),[])
-        self.assertEqual(len(self.visible(obs(),policy={'minimum_score':100,'category_priorities':{'infrastructure':50}})),1)
+        self.assertEqual(self.visible(obs(),minimum_score=100,policy={'minimum_score':100}),[])
+        self.assertEqual(len(self.visible(obs(),minimum_score=100,policy={'minimum_score':100,'category_priorities':{'infrastructure':50}})),1)
 
     def test_relevance_then_freshness_sort(self):
         with connect(':memory:') as db:
@@ -170,7 +172,7 @@ class AcceptanceTests(unittest.TestCase):
             with redirect_stdout(output): self.assertEqual(main(['--config',str(config),'migrate']),0)
             self.assertIn('tx_candidate_basis_backfills',output.getvalue())
             with connect(path) as db:
-                self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],4)
+                self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],6)
                 self.assertEqual(db.execute('SELECT tx_candidate_basis FROM claims WHERE id=?',(claim_id,)).fetchone()[0],'operator_relay')
                 audit=db.execute("SELECT reason FROM workflow_audit WHERE claim_id=? AND reason LIKE 'migration v4:%'",(claim_id,)).fetchone()[0]
                 self.assertIn('operator_relay',audit)
@@ -392,8 +394,11 @@ class AcceptanceTests(unittest.TestCase):
                           title='Major outage reported near Knoxville terminal'))
             persisted=db.execute('SELECT confidence_label FROM claims WHERE id=?',(media,)).fetchone()[0]
             queried,_=claim_detail(db,media,now=NOW)
-            self.assertEqual(persisted,'CORROBORATED')
+            self.assertEqual(persisted,'REPORTED')
             self.assertEqual(queried['confidence_label'],persisted)
+            ingest(db,obs(source_id='other-media',external_id='other-media',source_type='media',source_family='other-news',
+                          title='Major outage reported near Knoxville terminal'))
+            self.assertEqual(claim_detail(db,media,now=NOW)[0]['confidence_label'],'CORROBORATED')
 
     def test_bulletin_split_and_numbering(self):
         parts=split_message('Sentence one. Sentence two with enough words to split cleanly.', 24)
@@ -546,7 +551,9 @@ class AcceptanceTests(unittest.TestCase):
 
 
     def test_no_known_exploitation_not_operational(self):
-        self.assertEqual(self.visible(obs(category='cyber',source_family='cisa',title='Device advisory',body='No known public exploitation specifically targeting this vulnerability.',severity='unknown',location='United States')),[])
+        items=self.visible(obs(category='cyber',source_family='cisa',title='Device advisory',body='No known public exploitation specifically targeting this vulnerability.',severity='unknown',location='United States'))
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]['breakdown']['impact'],0)
 
     def test_fema_parser_preserves_fields(self):
         from shade_node.model import SourceConfig

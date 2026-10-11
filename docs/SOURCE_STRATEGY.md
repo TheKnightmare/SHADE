@@ -11,7 +11,8 @@ into one undifferentiated feed.
 
 1. **Local official signal** establishes what an agency says is happening.
 2. **Local media and community chatter** discovers events before they reach a
-   large newsroom, but remains reported or unverified until corroborated.
+   large newsroom. A single media observation clears the normal workflow gate;
+   two distinct media families are needed for the CORROBORATED label.
 3. **Top-news context** identifies national or global stories for a separate
    local-impact check. It is not automatically radio traffic.
 4. **Impact sources** answer the local question: what changes here—fuel cost,
@@ -40,8 +41,9 @@ out. A lane closure does not prove the cause reported by a caller or social post
 | WBIR | `https://www.wbir.com/feeds/syndication/rss/news` | Media | Existing broad East Tennessee feed |
 | WATE | `https://www.wate.com/feed/` | Media | Existing broad East Tennessee feed |
 | WVLT | `https://www.wvlt.tv/feed/` | Media | Existing broad East Tennessee feed |
-| WJHL / WCYB | Station feeds in private config | Media | Tri-Cities and upper East Tennessee |
-| WLOS / BPR / Mountain Xpress | Feeds in private config | Media | Western North Carolina |
+| WJHL | Station feed in private config | Media | Tri-Cities and upper East Tennessee |
+| BPR / Mountain Xpress | Feeds in private config | Media | Western North Carolina |
+| WCYB / WLOS | Former local feed URLs, disabled after HTTP 404 | Media | Retained in local config for manual follow-up; not active collection |
 | Knox TN Today | `https://www.knoxtntoday.com/feed/` | Media | Neighborhood, county, schools, utilities, and civic reporting |
 | Knoxville Focus | `https://knoxfocus.com/feed/` | Media | Community newspaper serving Knox County |
 | East Tennessee Enlightener | `https://etenlightener.org/feed/` | Media | Center-city and historically under-covered community reporting |
@@ -72,7 +74,7 @@ discovery view, but its links and source mix make it a poor originating family.
 
 | Source | Use |
 |---|---|
-| EIA Today in Energy | Energy, refinery, production, storage, and price context; not a real-time disruption feed |
+| EIA Open Data API | Enabled retail gasoline/diesel price and WTI/Brent crude spot feeds; trend context, not a real-time disruption feed |
 | FAA NAS status | Major airport closure or 2-hour-plus delay context for TYS and regional hubs |
 | OpenFEMA regional declarations | Administrative confirmation and affected counties; lagging, not a warning service |
 | CISA KEV and advisories | Exploited cyber risk and critical-infrastructure context |
@@ -207,7 +209,10 @@ unless an independent source confirms them.
 
 Telegram public previews are discovery-only community inputs: they are
 rate-limited globally by upstream domain, never include downloaded media, and
-remain unverified until an official or media family corroborates the claim.
+remain unverified without official or media reporting. The normal
+TX_CANDIDATE workflow gate needs any one official or media observation;
+the CORROBORATED confidence label specifically needs two distinct media
+families. These are separate thresholds.
 ACLED's registered US Crisis Monitor API is an official civil-unrest dataset;
 its event date, location, actors, notes, and fatality fields can independently
 clear a community unrest claim. Multiple community families alone do not clear
@@ -216,9 +221,10 @@ claim.
 
 `high_credibility = true` is an operator-facing source designation, initially
 used for S2 Underground Wire. It changes the display to `UNVERIFIED (HIGH-CRED
-SOURCE)` but never promotes a claim. Normal advancement to `TX_CANDIDATE`
-requires official or media evidence and is labeled `corroborated`. For an
-exception the operator must review the evidence and explicitly run
+SOURCE)` but never promotes a claim. Normal advancement to TX_CANDIDATE
+requires any one official or media observation and records the workflow basis
+corroborated. The CORROBORATED confidence label separately requires two media
+families. For an exception the operator must review the evidence and explicitly run
 `shade relay <id>`; SHADE labels the result `operator relay` and records that
 basis in the workflow audit log. Bulletin items use `(C)` for official/media
 support, `(O)` for operator relay, `(U-HC)` for an unconfirmed high-credibility

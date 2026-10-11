@@ -88,8 +88,8 @@ other unconfirmed REVIEW material.
 Each evaluation reports geography, category, impact, freshness, source
 confidence, corroboration, time sensitivity and operator-priority points. The
 sum is clamped to 0..100. Eligibility gates are separate from the numeric score:
-a high number never defeats an expiration, routine-weather or remote-earthquake
-filter. This is a transparent heuristic, not a factual verification service.
+a high number never defeats expiration or category-specific routine-content
+filters. This is a transparent heuristic, not a factual verification service.
 
 Default tiers: ETN/WNC (30 points), broader TN/KY/GA/NC (20), relevant national
 reports (12), global (0). Affected counties, not the issuing NWS office, establish
@@ -124,7 +124,9 @@ independent sources. Community-only single-family reporting is `UNVERIFIED`.
 Confidence labels describe attribution, not certainty about an event.
 The persisted claim and query-time view use the same confidence calculation.
 `high_credibility = true` adds a visible informational label without changing
-eligibility. Normal `TX_CANDIDATE` advancement records a `corroborated` basis;
+eligibility. Normal TX_CANDIDATE advancement needs any one official or media
+observation and records a corroborated workflow basis. The CORROBORATED
+confidence label separately needs two distinct media families;
 `shade relay ID` is the explicit, audited operator override and records an
 `operator_relay` basis.
 
@@ -150,6 +152,12 @@ a preview; `--apply` is explicit confirmation and creates a backup. It never
 deletes evidence. Suppression only changes NEW claims; reviewed claims are not
 bulk rejected. EXPIRED blocks manual workflow advancement; a newly received source validity extension may reactivate it as NEW with an audit entry. SUPPRESSED may return to REVIEW. Active
 views enforce expiration even without housekeeping or a scheduled job.
+
+## Regional discovery
+
+The regional-discovery pack rotates bounded news searches across ETN, WNC, and the rest of TN/KY/GA/NC. A three-hour poll searches three place/topic pairs per region; eight polls cover the daily query plan. Search hits retain their query and originating outlet, and local query/candidate diagnostics are written beside the database in a `.discovery.jsonl` file. `shade why-missed "headline or URL"` distinguishes an ingested display miss from a story that was never observed; it does not invent a precise cause for an unseen story. The [regional discovery audit](docs/REGIONAL_DISCOVERY_AUDIT.md) has the source inventory, baseline, and live comparison.
+
+This query rotation needs SHADE to run across the day. The desktop window does not schedule collection. The existing 15-minute STANDARD collector task is active on the station used for this audit. Review [scheduling guidance](docs/SCHEDULING.md), `shade doctor`, and the source failures before enabling it on another station.
 
 ## Sources and modes
 
@@ -182,3 +190,15 @@ virtual environments, caches, old packaging metadata and prior build products
 are excluded. Brand assets are preserved unchanged. The public repository
 identity is `TheKnightmare/SHADE`; building does not publish or push anything.
 
+## License and support
+
+SHADE, FIGHT and NODE are free software under the GNU General Public License v3
+or later (see `LICENSE`). You may use, study, share and modify them; if you
+distribute a modified version, share its source under the same license.
+Versions published before 2026-10-10 were MIT-licensed and stay available on
+those terms.
+
+The software is free. If it earns a place in your shack, support the project by
+picking up an OSINT STATION OPERATOR patch; donations keep development going.
+SHADE reads CommStat's data format for interoperability; it contains no
+CommStat code.

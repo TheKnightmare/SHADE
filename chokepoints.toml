@@ -75,6 +75,11 @@ incident_sources = ["WSDOT"]
 [[chokepoints]]
 id = "i40-pigeon-river-gorge"
 name = "I-40 Pigeon River Gorge (TN/NC)"
+aliases = ["Pigeon River Gorge", "Pigeon River corridor", "I-40 at the North Carolina state line"]
+route = "I-40"
+counties = ["Cocke"]
+mile_marker_min = 446
+mile_marker_max = 451
 note = "Draft ETN/WNC entry; verify route and closure coverage."
 watch_usgs_sites = []
 incident_sources = ["TDOT SmartWay", "NCDOT TIMS"]

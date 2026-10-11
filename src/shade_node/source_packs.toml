@@ -286,3 +286,140 @@ category = "top-news"
 area = "NATIONAL"
 pack = "top-news"
 min_poll_seconds = 1800
+
+[[sources]]
+id = "regional-search-etn"
+kind = "google_news_search"
+name = "Regional news search ETN"
+url = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US%3Aen"
+source_type = "media"
+source_family = "google-news-unattributed"
+category = "regional"
+pack = "regional-discovery"
+region_terms = ["(\"Knoxville\" OR \"Knox County\" OR \"Oak Ridge\")", "(\"East Tennessee\" OR \"Anderson County\" OR \"Sevier County\")", "(\"Tri-Cities\" OR \"Hawkins County\" OR \"Greene County\")", "(\"Cocke County\" OR \"Blount County\" OR \"Fentress County\")"]
+max_requests_per_poll = 3
+min_poll_seconds = 10800
+
+[[sources]]
+id = "regional-search-wnc"
+kind = "google_news_search"
+name = "Regional news search WNC"
+url = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US%3Aen"
+source_type = "media"
+source_family = "google-news-unattributed"
+category = "regional"
+pack = "regional-discovery"
+region_terms = ["(\"Asheville\" OR \"Buncombe County\" OR \"Blue Ridge Parkway\")", "(\"Western North Carolina\" OR \"Haywood County\" OR \"Henderson County\")", "(\"Brevard\" OR \"Transylvania County\" OR \"Madison County\")", "(\"Watauga County\" OR \"McDowell County\" OR \"Jackson County\")"]
+max_requests_per_poll = 3
+min_poll_seconds = 10800
+
+[[sources]]
+id = "regional-search-tn"
+kind = "google_news_search"
+name = "Regional news search TN"
+url = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US%3Aen"
+source_type = "media"
+source_family = "google-news-unattributed"
+category = "regional"
+pack = "regional-discovery"
+region_terms = ["(\"Tennessee\" OR \"Nashville\")", "(\"Chattanooga\" OR \"Hamilton County\" OR \"Collegedale\")", "(\"Memphis\" OR \"Shelby County\" OR \"Jackson Tennessee\")", "(\"Middle Tennessee\" OR \"Murfreesboro\" OR \"Clarksville Tennessee\")"]
+max_requests_per_poll = 3
+min_poll_seconds = 10800
+
+[[sources]]
+id = "regional-search-ky"
+kind = "google_news_search"
+name = "Regional news search KY"
+url = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US%3Aen"
+source_type = "media"
+source_family = "google-news-unattributed"
+category = "regional"
+pack = "regional-discovery"
+region_terms = ["(\"Kentucky\" OR \"Louisville\")", "(\"Lexington\" OR \"Fayette County Kentucky\")", "(\"Laurel County Kentucky\" OR \"Trigg County Kentucky\")", "(\"Grayson County Kentucky\" OR \"Lawrenceburg Kentucky\")"]
+max_requests_per_poll = 3
+min_poll_seconds = 10800
+
+[[sources]]
+id = "regional-search-ga"
+kind = "google_news_search"
+name = "Regional news search GA"
+url = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US%3Aen"
+source_type = "media"
+source_family = "google-news-unattributed"
+category = "regional"
+pack = "regional-discovery"
+region_terms = ["(\"Georgia\" OR \"Atlanta\")", "(\"Savannah\" OR \"Chatham County Georgia\")", "(\"North Georgia\" OR \"Gainesville Georgia\")", "(\"Macon Georgia\" OR \"Augusta Georgia\")"]
+max_requests_per_poll = 3
+min_poll_seconds = 10800
+
+[[sources]]
+id = "regional-search-nc"
+kind = "google_news_search"
+name = "Regional news search NC"
+url = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US%3Aen"
+source_type = "media"
+source_family = "google-news-unattributed"
+category = "regional"
+pack = "regional-discovery"
+region_terms = ["(\"North Carolina\" OR \"Raleigh\")", "(\"Charlotte\" OR \"Gaston County North Carolina\")", "(\"Wilson North Carolina\" OR \"Greensboro\")", "(\"Wilmington North Carolina\" OR \"Fayetteville North Carolina\")"]
+max_requests_per_poll = 3
+min_poll_seconds = 10800
+
+[[sources]]
+id = "usgs-etn-wnc-felt"
+kind = "usgs_geojson"
+name = "USGS ETN/WNC M1.5+ earthquakes"
+url = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minlatitude=33.5&maxlatitude=37.5&minlongitude=-85.5&maxlongitude=-81&minmagnitude=1.5&orderby=time&limit=100"
+source_type = "official"
+source_family = "usgs"
+category = "earthquake"
+pack = "regional"
+min_poll_seconds = 3600
+
+[[sources]]
+id = "3b-media"
+kind = "rss"
+name = "3B Media News - Upper Cumberland"
+url = "https://3bmedianews.com/feed/"
+source_type = "media"
+source_family = "3b-media"
+category = "regional"
+area = "Tennessee"
+pack = "regional-media"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "georgia-recorder"
+kind = "rss"
+name = "Georgia Recorder"
+url = "https://georgiarecorder.com/feed/"
+source_type = "media"
+source_family = "states-newsroom"
+category = "regional"
+area = "REGIONAL"
+pack = "regional-media"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "kentucky-lantern"
+kind = "rss"
+name = "Kentucky Lantern"
+url = "https://kentuckylantern.com/feed/"
+source_type = "media"
+source_family = "states-newsroom"
+category = "regional"
+area = "REGIONAL"
+pack = "regional-media"
+min_poll_seconds = 1800
+
+[[sources]]
+id = "nc-newsline"
+kind = "rss"
+name = "NC Newsline"
+url = "https://ncnewsline.com/feed/"
+source_type = "media"
+source_family = "states-newsroom"
+category = "regional"
+area = "REGIONAL"
+pack = "regional-media"
+min_poll_seconds = 1800

@@ -16,3 +16,6 @@ data/
 release/
 .release-build/
 .venv-*/
+
+# SHADE web rolling backups and local station files
+*.web-backup

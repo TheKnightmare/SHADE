@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import replace
 from email.utils import parsedate_to_datetime
 import json
 import re
+from math import radians, sin, cos, asin, sqrt
 import urllib.error
 import urllib.request
 import os
@@ -16,7 +18,19 @@ import xml.etree.ElementTree as ET
 from .model import Observation, SourceConfig, iso_utc
 from .relevance import timestamp
 from .keywords import hashtags
+from .regional_discovery import search_queries
 from hashlib import sha256
+
+
+class NotModified(RuntimeError):
+    pass
+
+
+class PartialCollectionError(RuntimeError):
+    def __init__(self, message, observations):
+        super().__init__(message)
+        self.observations = observations
+        self.retry_after = 0
 
 
 class CollectionError(RuntimeError):
@@ -45,6 +59,8 @@ def fetch_bytes(url: str, *, user_agent: str, timeout: int, max_bytes: int, head
                 raise CollectionError(f"response exceeds {max_bytes} bytes")
             data = response.read(max_bytes + 1)
     except urllib.error.HTTPError as exc:
+        if exc.code == 304:
+            raise NotModified() from exc
         retry=exc.headers.get('Retry-After','')
         try: seconds=int(retry)
         except ValueError:
@@ -179,24 +195,35 @@ def parse_rss(source: SourceConfig, data: bytes) -> list[Observation]:
                     link = child.attrib["href"]
                     break
         external_id = _node_text(item, "guid") or _node_text(item, "id") or link or title
+        publisher = next((child for child in item if child.tag.rsplit('}', 1)[-1].lower() == 'source'), None)
+        publisher_name = (publisher.text or '').strip() if publisher is not None else ''
+        publisher_host = urlparse(publisher.attrib.get('url', '')).hostname if publisher is not None else None
+        is_search = source.kind == 'google_news_search'
+        family = publisher_host.removeprefix('www.').lower() if publisher_host else 'google-news-unattributed'
+        if is_search and publisher_name and title.casefold().endswith((' - ' + publisher_name).casefold()):
+            title = title[:-(len(publisher_name) + 3)].strip()
         date_text = _node_text(item, "pubDate") or _node_text(item, "published") or _node_text(item, "updated")
         try:
             published = iso_utc(parsedate_to_datetime(date_text)) if date_text else ""
         except (TypeError, ValueError, OverflowError):
             published = iso_utc(date_text) if timestamp(date_text) else ""
+        raw = {"title": title, "body": body, "link": link, "published": date_text,
+               "xml": ET.tostring(item, encoding="unicode"), "_area": "" if is_search else source.area}
+        if is_search:
+            raw.update(_discovery_source=source.id, _origin_host=family)
         observations.append(
             Observation(
                 source_id=source.id,
-                source_name=source.name,
+                source_name=(publisher_name or source.name) if is_search else source.name,
                 source_type=source.source_type,
-                source_family=source.source_family,
+                source_family=source.origin_families.get(family, family) if is_search else source.source_family,
                 external_id=external_id,
                 title=title,
                 body=body,
                 url=link or source.url,
                 category=source.category,
                 published_at=published,
-                raw={"title": title, "body": body, "link": link, "published": date_text, "xml": ET.tostring(item, encoding="unicode"), "_area": source.area},
+                raw=raw,
             )
         )
     return observations
@@ -243,6 +270,57 @@ def parse_fema(source, data):
                       'https://www.fema.gov/disaster/'+str(item['disasterNumber']),category='public-safety',
                       location=item['designatedArea']+', '+item['state'],severity='severe',
                       published_at=item['declarationDate'],raw=item))
+    return result
+
+
+def parse_notams(source, data):
+    """FAA NOTAM Search API (external-api.faa.gov/notamapi/v1/notams).
+
+    UNVERIFIED against a live response: this station has no FAA NOTAM API
+    credential configured, so this parser is written defensively against the
+    publicly documented response shape (a top-level 'items' list, each with
+    an 'icaoLocation'/nested 'properties'/'coreNOTAMData' structure per FAA's
+    published schema) and tries a small number of reasonable field-name
+    fallbacks rather than assuming one exact shape. Verify field names
+    against a real response before relying on this in production - see the
+    completion report.
+
+    Captures the notice issue time, effective start, expiration, affected
+    location/airspace, altitude limits, source, and the raw notice text, and
+    tags every result category='notam' (never 'public-safety') so
+    evaluate()'s dedicated NOTAM triage in relevance.py decides whether it is
+    public-impact-worthy - this parser does not decide that itself."""
+    payload = _json(data)
+    items = payload.get('items') if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise CollectionError('Invalid FAA NOTAM API schema')
+    result = []
+    for item in items:
+        core = (item.get('properties') or {}).get('coreNOTAMData', {}).get('notam', {}) if 'properties' in item else item
+        notam_id = core.get('id') or core.get('notamNumber') or item.get('notamNumber') or ''
+        icao = core.get('icaoLocation') or core.get('location') or item.get('icaoId') or ''
+        text = core.get('text') or item.get('text') or item.get('traditionalMessage') or ''
+        issued = core.get('issued') or item.get('issued') or ''
+        effective_start = core.get('effectiveStart') or item.get('startDate') or issued
+        effective_end = core.get('effectiveEnd') or item.get('endDate') or ''
+        min_alt = core.get('minimumFL') or item.get('minimumAlt') or ''
+        max_alt = core.get('maximumFL') or item.get('maximumAlt') or ''
+        if not notam_id or not text:
+            continue
+        result.append(Observation(
+            source.id, source.name, source.source_type, source.source_family, str(notam_id),
+            f'NOTAM {icao or "?"}: {text[:120]}', text,
+            source.url, category='notam', location=icao,
+            severity='unknown', published_at=issued,
+            # 'properties.onset'/'expires' feed relevance.metadata()'s existing,
+            # generic onset/expiration logic for free - same convention every
+            # other structured source (NWS, etc.) already uses - while the
+            # '_notam_*' keys preserve the original field names/values for
+            # evidence display exactly as the source reported them.
+            raw={**item, '_area': source.area or 'REGIONAL',
+                 'properties': {**(item.get('properties') or {}), 'onset': effective_start, 'expires': effective_end},
+                 '_notam_effective_start': effective_start, '_notam_effective_end': effective_end,
+                 '_notam_min_alt': min_alt, '_notam_max_alt': max_alt, '_notam_issued': issued}))
     return result
 
 
@@ -388,20 +466,41 @@ def parse_safecast(source, data):
     payload = _json(data)
     rows = payload.get('measurements', payload) if isinstance(payload, dict) else payload
     if not isinstance(rows, list): raise CollectionError('Invalid Safecast API schema')
+    # The API performs the primary geographic query. Recheck returned points so
+    # a bad upstream response cannot turn out-of-area data into local reports.
+    query = parse_qs(urlparse(source.url).query)
+    try:
+        center = (float(query['latitude'][0]), float(query['longitude'][0]))
+        radius = float(query['distance'][0])
+    except (KeyError, IndexError, TypeError, ValueError):
+        center, radius = None, None
     result = []
     for item in rows:
         value = next((item.get(key) for key in ('value', 'value_numeric', 'dose_rate')
                       if item.get(key) is not None), None)
         try: numeric = float(value)
         except (TypeError, ValueError): continue
-        lat, lon = item.get('latitude'), item.get('longitude')
-        location = f'{lat},{lon}' if lat is not None and lon is not None else source.area
+        try:
+            lat, lon = float(item['latitude']), float(item['longitude'])
+        except (KeyError, TypeError, ValueError):
+            if center: continue
+            lat = lon = None
+        if center:
+            lat1, lon1, lat2, lon2 = map(radians, (*center, lat, lon))
+            hav = sin((lat2-lat1)/2)**2 + cos(lat1)*cos(lat2)*sin((lon2-lon1)/2)**2
+            if 6371000 * 2 * asin(min(1, sqrt(hav))) > radius:
+                continue
+        location = f'{lat},{lon}' if lat is not None else (source.area or '')
         external = str(item.get('id') or f'{location}|{item.get("captured_at", "")}|{numeric}')
+        raw = dict(item)
+        if center:
+            raw['_area'] = 'ETN/WNC'  # Derived from verified coordinates inside the configured circle.
+            raw['_geographic_scope'] = {'latitude': center[0], 'longitude': center[1], 'radius_m': radius}
         result.append(Observation(source.id, source.name, 'community', 'safecast', external,
             f'Safecast reading {numeric:g} {item.get("unit", "")}',
             f'Volunteer sensor reading {numeric:g} {item.get("unit", "")}; sensor {item.get("device_id", "unknown")}.', source.url,
             category='radiological', location=location, severity='moderate', published_at=item.get('captured_at', ''),
-            raw={**item, '_area': source.area or 'ETN/WNC'}))
+            raw=raw))
     return result
 
 
@@ -531,15 +630,20 @@ def _collect_wzdx_registry(source, *, user_agent, timeout, max_bytes):
     if key: headers['Authorization'] = f'Bearer {key}'
     registry = fetch_bytes(source.url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)
     observations = []
-    for row, url in _wzdx_registry_rows(registry):
+    failures = []
+    succeeded = 0
+    for row, url in _wzdx_registry_rows(registry)[:max(0, source.max_requests_per_poll-1)]:
         try:
             data = fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)
             state = _wzdx_state(row)
             observations.extend(parse_wzdx_feed(source, data, state=state, feed_url=url))
-        except CollectionError:
-            # Registry membership is not proof that a feed is live; stale feeds
-            # are skipped so one dead provider cannot fail the nationwide run.
-            continue
+            succeeded += 1
+        except CollectionError as exc:
+            failures.append(f'{url}: {exc}')
+    if failures and not succeeded:
+        raise CollectionError(f'{len(failures)} WZDx child feed(s) failed: '+ '; '.join(failures[:3]))
+    if failures:
+        raise PartialCollectionError(f'{len(failures)} WZDx child feed(s) failed: '+ '; '.join(failures[:3]), observations)
     return observations
 
 
@@ -552,13 +656,15 @@ def _mastodon_url(source):
 def _collect_mastodon(source, *, user_agent, timeout, max_bytes):
     tags = [source.hashtag.lstrip('#')] if source.hashtag else hashtags(source.keywords)
     all_rows = []
+    requests = 0
     for tag in tags:
+        if requests >= source.max_requests_per_poll: break
         page_url = source.url if source.hashtag and source.url else f'https://{source.instance}/api/v1/timelines/tag/{tag}?limit=40'
         pages = 0
-        while page_url and pages < 3 and len(all_rows) < source.max_posts_per_poll:
+        while page_url and pages < 3 and requests < source.max_requests_per_poll and len(all_rows) < source.max_posts_per_poll:
             data, headers = fetch_bytes(page_url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, return_headers=True)
-            all_rows.extend(parse_mastodon(source, data)); pages += 1
-            link = headers.get('Link', '')
+            all_rows.extend(parse_mastodon(source, data)); pages += 1; requests += 1
+            link = next((value for name, value in headers.items() if name.lower() == 'link'), '')
             match = re.search(r'<([^>]+)>;\s*rel="next"', link)
             page_url = match.group(1) if match else ''
     return all_rows[:source.max_posts_per_poll]
@@ -610,7 +716,13 @@ def parse_acled(source, data):
     return result
 
 
+def _node_js8_placeholder(source, data):
+    raise CollectionError('node_js8_forms reads local NODE logs; handled in collect()')
+
+
 PARSERS = {
+    "node_js8_forms": _node_js8_placeholder,
+    "commstat_db": _node_js8_placeholder,
     "nws_alerts": parse_nws,
     "usgs_geojson": parse_usgs,
     "swpc_alerts": parse_swpc,
@@ -633,13 +745,28 @@ PARSERS = {
     "nps_alerts": parse_nps_alerts,
     "inciweb": parse_inciweb,
     "ipaws_archive": parse_ipaws_archive,
+    "notam_search": parse_notams,
 }
 
 
-def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: int) -> list[Observation]:
+def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: int,
+            conditional: dict | None = None, response_meta: dict | None = None) -> list[Observation]:
+    if source.kind == 'node_js8_forms':
+        from .node_js8 import collect_node_js8
+        return collect_node_js8(source)
+    if source.kind == 'commstat_db':
+        from .commstat import collect_commstat_db
+        return collect_commstat_db(source)
     parser = PARSERS.get(source.kind)
     if not parser:
         raise CollectionError(f"unknown collector kind: {source.kind}")
+    if source.kind == 'epa_radnet':
+        # The station config is a URL template; use the current UTC year on
+        # every request and in the observation's source link.
+        current_url = re.sub(r'(/csv/)\d{4}(/fixed/)',
+                             lambda match: match.group(1) + str(datetime.now(timezone.utc).year) + match.group(2),
+                             source.url, count=1)
+        source = replace(source, url=current_url)
     headers = {}
     key = ''
     if source.api_key_env:
@@ -662,16 +789,30 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
         headers['X-Api-Key'] = key
         return parser(source, fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers))
     if source.kind == 'google_news_search':
-        terms = source.query_terms or source.keywords.get(source.keyword_tier, [])
+        terms = search_queries(source) if source.region_terms else (source.query_terms or source.keywords.get(source.keyword_tier, []))
         if not terms:
             raise CollectionError('google_news_search has no keyword terms')
         observations = []
-        for term in terms:
+        failures = []
+        for term in terms[:source.max_requests_per_poll]:
             parsed = urlparse(source.url)
             query = parse_qs(parsed.query)
             query['q'] = [term]
             url = urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
-            observations.extend(parse_rss(source, fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers)))
+            try:
+                found = parse_rss(source, fetch_bytes(url, user_agent=user_agent, timeout=timeout, max_bytes=max_bytes, headers=headers))
+                for observation in found:
+                    observation.raw['_discovery_query'] = term
+                    observation.raw['_discovery_url'] = url
+                observations.extend(found)
+                if response_meta is not None:
+                    response_meta.setdefault('query_attempts', []).append({'query': term, 'url': url, 'count': len(found), 'error': ''})
+            except CollectionError as exc:
+                failures.append(f'{term}: {exc}')
+                if response_meta is not None:
+                    response_meta.setdefault('query_attempts', []).append({'query': term, 'url': url, 'count': 0, 'error': str(exc)})
+        if failures:
+            raise PartialCollectionError('; '.join(failures), observations)
         return observations
     url = source.url
     if source.kind == 'eia_prices':
@@ -682,7 +823,20 @@ def collect(source: SourceConfig, *, user_agent: str, timeout: int, max_bytes: i
         query = {'format': 'json', 'sites': ','.join(source.sites), 'parameterCd': ','.join(source.parameters)}
         parsed = urlparse(url); current = parse_qs(parsed.query); current.update({k: [v] for k, v in query.items()})
         url = urlunparse(parsed._replace(query=urlencode(current, doseq=True)))
-    data=fetch_bytes(url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes,headers=headers)
+    if source.kind == 'rss' and conditional:
+        if conditional.get('etag'): headers['If-None-Match'] = conditional['etag']
+        if conditional.get('last_modified'): headers['If-Modified-Since'] = conditional['last_modified']
+    try:
+        if source.kind == 'rss':
+            data, received = fetch_bytes(url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes,headers=headers,return_headers=True)
+            if response_meta is not None:
+                normalized={name.lower(): value for name, value in received.items()}
+                response_meta.update(etag=normalized.get('etag',''), last_modified=normalized.get('last-modified',''))
+        else:
+            data=fetch_bytes(url,user_agent=user_agent,timeout=timeout,max_bytes=max_bytes,headers=headers)
+    except NotModified:
+        if response_meta is not None: response_meta['not_modified'] = True
+        return []
     try:
         return parser(source,data)
     except (ValueError,TypeError,KeyError,AttributeError,OverflowError) as exc:

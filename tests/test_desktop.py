@@ -2,6 +2,7 @@
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from shade_node.desktop import DesktopService
@@ -30,7 +31,8 @@ class DesktopTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.service.format(self.claim_id)
         with self.assertRaises(ValueError): self.service.mark(self.claim_id, 'SENT')
         self.service.mark(self.claim_id, 'REVIEW')
-        self.assertIn('TEST', self.service.format(self.claim_id))
+        self.assertIn('MAJOR COMMUNICATIONS OUTAGE', self.service.format(self.claim_id))
+        self.assertNotIn('REVIEWED-BY:', self.service.format(self.claim_id))
         with self.assertRaises(ValueError): self.service.format(self.claim_id, 'actual')
         self.assertIn('ACTUAL', self.service.format(self.claim_id, 'actual', True))
         self.assertGreaterEqual(self.service.format(self.claim_id, 'exercise').count('EXERCISE'), 2)
@@ -111,5 +113,80 @@ class DesktopTests(unittest.TestCase):
         self.assertIsNone(app.claim)
 
 
+    def test_window_age_sort_and_bulk_selection(self):
+        import tkinter as tk
+        from shade_node.gui import ShadeWindow
+        with connect(self.service.settings.database) as db:
+            # Relative to "now" rather than a fixed calendar date, so this
+            # fixture can't drift stale (outside the freshness window,
+            # dropped from the default Inbox listing) as real time passes.
+            recent = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            second_id, _ = ingest(db, Observation('second', 'Second', 'community', 'second', 'two',
+                'County bridge closure', 'Bridge closed', 'https://example.test/bridge',
+                category='transportation', location='Buncombe NC',
+                published_at=recent))
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest('Tcl/Tk runtime unavailable: '+str(exc))
+        root.withdraw()
+        app = ShadeWindow(root, self.service)
+        self.addCleanup(lambda: (app.pool.shutdown(wait=True), root.destroy()))
+        deadline = time.monotonic()+5
+        while app.busy and time.monotonic()<deadline:
+            root.update()
+            time.sleep(.01)
+        root.update()
+        app.sort_by('age')
+        self.assertEqual(app.tree.get_children()[0], str(self.claim_id))
+        app.tree.selection_set((str(self.claim_id), str(second_id)))
+        root.update()
+        self.assertEqual(str(app.bulk_button['state']), 'normal')
+        self.assertEqual(str(app.format_button['state']), 'disabled')
+        self.assertIsNone(app.claim)
+
 if __name__ == '__main__':
     unittest.main()
+
+
+class BackgroundCollectTests(unittest.TestCase):
+    setUp = DesktopTests.setUp
+    """Speed pass 2026-10-09: Collect now must not lock the operator out."""
+    def test_collect_runs_in_background_and_review_continues(self):
+        import threading
+        import tkinter as tk
+        from shade_node.gui import ShadeWindow
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest('Tcl/Tk runtime unavailable: '+str(exc))
+        root.withdraw()
+        release = threading.Event()
+        def slow_collect(mode):
+            release.wait(5)
+            return {'sources_ok': 1, 'sources_partial': 0, 'sources_failed': 0, 'inserted': 0,
+                    'sources_skipped_cooldown': 0, 'errors': []}
+        self.service.collect = slow_collect
+        app = ShadeWindow(root, self.service)
+        self.addCleanup(lambda: (release.set(), app.pool.shutdown(wait=True), app.collect_pool.shutdown(wait=True), root.destroy()))
+        def pump(until, seconds=5):
+            deadline = time.monotonic()+seconds
+            while time.monotonic() < deadline and not until():
+                root.update(); time.sleep(.01)
+            self.assertTrue(until())
+        pump(lambda: not app.busy)
+        with patch('shade_node.gui.messagebox.showinfo') as shown:
+            app.collect()
+            self.assertTrue(app.collecting)
+            self.assertFalse(app.busy)
+            self.assertEqual(str(app.collect_button['state']), 'disabled')
+            app.refresh()
+            pump(lambda: not app.busy)
+            self.assertIn(str(self.claim_id), app.tree.get_children())
+            app.tree.selection_set(str(self.claim_id))
+            pump(lambda: app.claim is not None and not app.busy)
+            release.set()
+            pump(lambda: not app.collecting)
+            pump(lambda: shown.called)
+            pump(lambda: not app.busy)
+        self.assertEqual(str(app.collect_button['state']), 'normal')
